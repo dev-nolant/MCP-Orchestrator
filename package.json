@@ -1,0 +1,29 @@
+{
+  "name": "mcp-orchestrator",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Connect MCPs locally and automate actions between them",
+  "main": "build/index.js",
+  "bin": {
+    "mcp-orchestrator": "./build/index.js"
+  },
+  "scripts": {
+    "build": "npx tsc",
+    "start": "node build/index.js",
+    "run": "tsc && node build/index.js",
+    "list": "tsc && node build/index.js list",
+    "workflow": "tsc && node build/index.js workflow",
+    "ui": "npx tsc && node build/server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "express": "^4.21.0",
+    "node-cron": "^4.2.1"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.13.8",
+    "@types/node-cron": "^3.0.11",
+    "typescript": "^5.8.2"
+  }
+}

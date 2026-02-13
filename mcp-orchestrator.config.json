@@ -1,0 +1,89 @@
+{
+  "mcps": {
+    "spotify": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "../spotify-mcp-server/build/index.js"
+      ],
+      "cwd": "../spotify-mcp-server"
+    },
+    "Pieces": {
+      "type": "url",
+      "url": "http://localhost:39300/model_context_protocol/2025-03-26/mcp",
+      "requestTimeout": 180000,
+      "enabled": true
+    },
+    "server-filesystem": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/nolantaft/test-spotify-mcp"
+      ],
+      "cwd": "/Users/nolantaft/test-spotify-mcp",
+      "startOnStartup": true,
+      "enabled": true
+    }
+  },
+  "workflows": [
+    {
+      "name": "Spotify to Pieces",
+      "description": "Fetch recently played songs and save to Pieces memory",
+      "steps": [
+        {
+          "mcp": "spotify",
+          "tool": "getRecentlyPlayed",
+          "args": {
+            "limit": 15
+          }
+        },
+        {
+          "mcp": "Pieces",
+          "tool": "create_pieces_memory",
+          "args": {
+            "summary_description": "Spotify listening history (last 15 tracks)",
+            "summary": "# Spotify Recently Played\n\n{{step0}}"
+          }
+        }
+      ],
+      "trigger": "schedule",
+      "schedule": "*/15 * * * *",
+      "scheduleFormat": "time"
+    },
+    {
+      "name": "Currently Playing to Pieces",
+      "steps": [
+        {
+          "mcp": "spotify",
+          "tool": "getNowPlaying",
+          "args": {}
+        },
+        {
+          "mcp": "Pieces",
+          "tool": "create_pieces_memory",
+          "args": {
+            "summary_description": "Currently playing song from Spotify",
+            "summary": "# Spotify Currently Playing\n\n{{step0}}"
+          }
+        }
+      ],
+      "trigger": "manual",
+      "schedule": ""
+    },
+    {
+      "name": "Fetch Files",
+      "steps": [
+        {
+          "mcp": "server-filesystem",
+          "tool": "read_text_file",
+          "args": {
+            "path": "/Users/nolantaft/test-spotify-mcp/test.txt"
+          }
+        }
+      ],
+      "trigger": "manual"
+    }
+  ]
+}

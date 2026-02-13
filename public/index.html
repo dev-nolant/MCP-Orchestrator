@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MCP Orchestrator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="header-main">
+        <div>
+          <h1 class="logo">MCP Orchestrator</h1>
+          <p class="tagline">Connect MCPs · Build automations · Chain tools</p>
+        </div>
+        <button type="button" class="btn btn-ghost btn-logs" id="logs-btn" title="View activity logs">
+          <span class="logs-icon">≡</span>
+          <span class="logs-label">Logs</span>
+          <span class="logs-badge hidden" id="logs-badge">0</span>
+        </button>
+      </div>
+      <nav class="tabs">
+        <button class="tab active" data-tab="mcps">MCPs</button>
+        <button class="tab" data-tab="workflows">Workflows</button>
+        <button class="tab" data-tab="schedule">Schedule</button>
+        <button class="tab" data-tab="run">Run</button>
+      </nav>
+    </header>
+
+    <main class="main">
+      <section id="panel-mcps" class="panel active">
+        <div class="panel-header">
+          <h2>MCP Servers</h2>
+          <div class="panel-header-actions">
+            <button type="button" class="btn btn-ghost" id="check-mcp-status-btn" title="Check if MCPs are online">Check status</button>
+            <button type="button" class="btn btn-primary" id="add-mcp-btn">Add MCP</button>
+          </div>
+        </div>
+        <div class="mcp-sub-tabs">
+          <button type="button" class="mcp-sub-tab active" data-mcp-sub="my-mcps">My MCPs</button>
+          <button type="button" class="mcp-sub-tab" data-mcp-sub="discover">Discover</button>
+        </div>
+        <div id="mcp-checking-banner" class="mcp-checking-banner hidden">
+          <span class="mcp-checking-spinner"></span>
+          <span>Checking MCPs…</span>
+        </div>
+        <div id="mcp-sub-panel-my-mcps" class="mcp-sub-panel active">
+          <div id="mcps-list" class="mcps-list"></div>
+        </div>
+        <div id="mcp-sub-panel-discover" class="mcp-sub-panel">
+          <div class="discover-toolbar">
+            <input type="search" id="discover-search" placeholder="Search or type @org/package (e.g. @modelcontextprotocol/server-filesystem)…" class="discover-search" autocomplete="off" />
+            <button type="button" class="btn btn-ghost" id="discover-load-more">Load more</button>
+          </div>
+          <div id="discover-cards" class="discover-cards"></div>
+          <div id="discover-loading" class="discover-loading hidden">Loading…</div>
+          <div id="discover-empty" class="discover-empty hidden">No servers found.</div>
+        </div>
+      </section>
+
+      <section id="panel-workflows" class="panel">
+        <div class="panel-header">
+          <h2>Workflow Builder</h2>
+          <button type="button" class="btn btn-primary" id="add-workflow-btn">Add Workflow</button>
+        </div>
+        <div id="workflows-list" class="workflows-list"></div>
+      </section>
+
+      <section id="panel-schedule" class="panel">
+        <div class="panel-header">
+          <h2>Scheduled Workflows</h2>
+        </div>
+        <div id="schedule-list" class="schedule-list"></div>
+        <div class="form-row-hint" style="margin-top:1rem">Cron format: minute hour day-of-month month day-of-week. Use Time for recurring times (e.g. */30 * * * * = every 30 min). Use Date for specific days (e.g. 0 0 * * 1 = Mondays at midnight).</div>
+      </section>
+
+      <section id="panel-run" class="panel">
+        <div class="panel-header">
+          <h2>Run Workflows</h2>
+        </div>
+        <div id="run-workflows" class="run-list"></div>
+        <h3 class="output-label">Output</h3>
+        <div id="output" class="output-box">
+          <p class="placeholder">Run a workflow to see output.</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="logs-overlay" class="logs-overlay hidden"></div>
+  <aside id="logs-panel" class="logs-panel">
+    <div class="logs-panel-header">
+      <h3 class="logs-panel-title">Activity Logs</h3>
+      <div class="logs-panel-actions">
+        <select id="logs-filter" class="logs-filter" title="Filter by type">
+          <option value="all">All</option>
+          <option value="run">Run</option>
+          <option value="schedule">Schedule</option>
+          <option value="spin">Spin</option>
+          <option value="install">Install</option>
+          <option value="config">Config</option>
+        </select>
+        <button type="button" class="btn btn-ghost btn-logs-download" title="Download logs">↓ Download</button>
+        <button type="button" class="btn btn-ghost btn-logs-clear" title="Clear logs">Clear</button>
+        <button type="button" class="btn btn-ghost btn-logs-close" id="logs-close-btn" title="Close">×</button>
+      </div>
+    </div>
+    <div id="logs-list" class="logs-list"></div>
+    <div id="logs-empty" class="logs-empty">No logs yet. Run workflows, spin MCPs, or install packages.</div>
+  </aside>
+
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div id="modal" class="modal"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

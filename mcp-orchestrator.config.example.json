@@ -1,0 +1,35 @@
+{
+  "mcps": {
+    "spotify": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["../spotify-mcp-server/build/index.js"],
+      "cwd": "../spotify-mcp-server"
+    },
+    "pieces": {
+      "type": "url",
+      "url": "http://localhost:39300/model_context_protocol/2025-03-26/mcp"
+    }
+  },
+  "workflows": [
+    {
+      "name": "Spotify to Pieces",
+      "description": "Fetch recently played songs and save to Pieces memory",
+      "steps": [
+        {
+          "mcp": "spotify",
+          "tool": "getRecentlyPlayed",
+          "args": { "limit": 15 }
+        },
+        {
+          "mcp": "pieces",
+          "tool": "create_pieces_memory",
+          "args": {
+            "summary_description": "Spotify listening history (last 15 tracks)",
+            "summary": "# Spotify Recently Played\n\n{{step0}}"
+          }
+        }
+      ]
+    }
+  ]
+}
