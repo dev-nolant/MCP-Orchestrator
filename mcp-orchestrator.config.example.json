@@ -1,35 +1,57 @@
 {
   "mcps": {
-    "spotify": {
+    "filesystem": {
       "type": "stdio",
-      "command": "node",
-      "args": ["../spotify-mcp-server/build/index.js"],
-      "cwd": "../spotify-mcp-server"
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/path/to/your/projects"
+      ],
+      "startOnStartup": true
     },
-    "pieces": {
-      "type": "url",
-      "url": "http://localhost:39300/model_context_protocol/2025-03-26/mcp"
+    "memory": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "startOnStartup": false
     }
   },
   "workflows": [
     {
-      "name": "Spotify to Pieces",
-      "description": "Fetch recently played songs and save to Pieces memory",
+      "name": "Find config files",
+      "description": "Search for JSON config files in your project",
       "steps": [
         {
-          "mcp": "spotify",
-          "tool": "getRecentlyPlayed",
-          "args": { "limit": 15 }
-        },
-        {
-          "mcp": "pieces",
-          "tool": "create_pieces_memory",
+          "mcp": "filesystem",
+          "tool": "search_files",
           "args": {
-            "summary_description": "Spotify listening history (last 15 tracks)",
-            "summary": "# Spotify Recently Played\n\n{{step0}}"
+            "path": "/path/to/your/projects",
+            "pattern": "**/*.config.json"
           }
         }
-      ]
+      ],
+      "trigger": "manual"
+    },
+{
+  "name": "Add note to memory",
+      "description": "Store a note in the memory knowledge graph",
+      "steps": [
+        {
+          "mcp": "memory",
+          "tool": "create_entities",
+          "args": {
+            "entities": [
+              {
+                "name": "demo-note",
+                "entityType": "note",
+                "observations": ["Example note from MCP Orchestrator. Edit this workflow in the UI!"]
+              }
+            ]
+          }
+        }
+      ],
+      "trigger": "manual"
     }
   ]
 }

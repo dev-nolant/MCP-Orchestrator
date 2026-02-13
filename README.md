@@ -1,6 +1,6 @@
 # MCP Orchestrator
 
-Connect MCPs locally (via URL or stdio) and automate actions between them. Chain tools from different MCPs: e.g. run Spotify's `getRecentlyPlayed` → send the output to Pieces' `create_pieces_memory`.
+Connect MCPs locally (via URL or stdio) and automate actions between them. Chain tools from different MCPs—e.g. filesystem `search_files` → memory `create_entities`, or your own MCP combos.
 
 ## Setup
 
@@ -12,7 +12,11 @@ npm run build
 
 ## Config
 
-Create `mcp-orchestrator.config.json` (copy from `mcp-orchestrator.config.example.json`). Two MCP types:
+Copy the example and edit for your setup:
+```bash
+cp mcp-orchestrator.config.example.json mcp-orchestrator.config.json
+```
+Your config is gitignored and never committed. Two MCP types:
 
 ### URL (HTTP/SSE)
 For MCPs that expose an HTTP endpoint (e.g. Pieces):
@@ -36,7 +40,7 @@ For MCPs that run as a process (e.g. Spotify MCP):
 }
 ```
 
-Use absolute paths if running from elsewhere.
+Use absolute paths if running from elsewhere. For the filesystem MCP, replace `/path/to/your/projects` with a directory you want to allow (e.g. your home or a project folder).
 
 ## Workflows
 
@@ -181,6 +185,40 @@ launchctl load ~/Library/LaunchAgents/com.mcp-orchestrator.spotify-pieces.plist
 ```cron
 */30 * * * * cd /path/to/mcp-orchestrator && npm run workflow -- "Spotify to Pieces"
 ```
+
+## Use as an MCP (Cursor / Claude Desktop)
+
+MCP Orchestrator exposes its workflows as MCP tools so Cursor, Claude Desktop, or any MCP client can run them.
+
+**Tools exposed:**
+- `list_workflows` — List all configured workflows
+- `run_workflow` — Run a workflow by name
+
+### Add to Cursor
+
+1. Open **Settings → MCP**.
+2. Add a server with **Streamable HTTP** and this URL:
+   ```
+   http://localhost:3847/mcp
+   ```
+   If using mcporch.local: `http://mcporch.local:3847/mcp`
+3. Restart Cursor.
+
+### Add to Claude Desktop
+
+In `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "mcp-orchestrator": {
+      "url": "http://localhost:3847/mcp"
+    }
+  }
+}
+```
+
+Ensure the MCP Orchestrator server is running (`npm run ui` or via the install scripts) before using the tools.
 
 ## Prerequisites
 

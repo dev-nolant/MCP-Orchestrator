@@ -3,25 +3,13 @@
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import fs from 'node:fs';
 import { runWorkflow } from './workflow.js';
 import { startScheduler } from './scheduler.js';
 import { appendLog, getLogs, clearLogs } from './logs.js';
+import { loadConfig, saveConfig } from './config-loader.js';
 import type { OrchestratorConfig } from './config.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const CONFIG_PATH = path.join(process.cwd(), 'mcp-orchestrator.config.json');
-
-function loadConfig(): OrchestratorConfig {
-  if (!fs.existsSync(CONFIG_PATH)) {
-    return { mcps: {}, workflows: [] };
-  }
-  return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8')) as OrchestratorConfig;
-}
-
-function saveConfig(config: OrchestratorConfig): void {
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf8');
-}
 
 async function main() {
   // Apply startOnStartup: spin up MCPs that should start when the server starts
@@ -415,6 +403,29 @@ async function main() {
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }
+  });
+
+  app.post('/mcp', async (req, res) => {
+    const { handleMcpRequest } = await import('./mcp-server.js');
+    await handleMcpRequest(req, res, req.body);
+  });
+  app.get('/mcp', async (req, res) => {
+    const sessionId = req.headers['mcp-session-id'] as string | undefined;
+    if (!sessionId) {
+      res.status(400).send('Missing mcp-session-id header');
+      return;
+    }
+    const { handleMcpRequest } = await import('./mcp-server.js');
+    await handleMcpRequest(req, res);
+  });
+  app.delete('/mcp', async (req, res) => {
+    const sessionId = req.headers['mcp-session-id'] as string | undefined;
+    if (!sessionId) {
+      res.status(400).send('Missing mcp-session-id header');
+      return;
+    }
+    const { handleMcpRequest } = await import('./mcp-server.js');
+    await handleMcpRequest(req, res);
   });
 
   app.use(express.static(path.join(__dirname, '../public')));

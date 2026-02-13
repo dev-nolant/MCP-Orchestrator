@@ -1,15 +1,8 @@
 import cron from 'node-cron';
-import fs from 'node:fs';
-import path from 'node:path';
+import { loadConfig } from './config-loader.js';
 import { runWorkflow } from './workflow.js';
 import { appendLog } from './logs.js';
-const CONFIG_PATH = path.join(process.cwd(), 'mcp-orchestrator.config.json');
 const jobs = new Map();
-function loadConfig() {
-    if (!fs.existsSync(CONFIG_PATH))
-        return { mcps: {}, workflows: [] };
-    return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
-}
 export function startScheduler(config) {
     stopScheduler();
     for (const w of config.workflows) {
