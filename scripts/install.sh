@@ -50,6 +50,14 @@ add_hosts() {
   fi
 }
 
+# Copy example config if none exists
+CONFIG="$ORCH_DIR/mcp-orchestrator.config.json"
+EXAMPLE="$ORCH_DIR/mcp-orchestrator.config.example.json"
+if [ ! -f "$CONFIG" ] && [ -f "$EXAMPLE" ]; then
+  cp "$EXAMPLE" "$CONFIG"
+  echo "  ✓ Created mcp-orchestrator.config.json from example"
+fi
+
 # Install deps and build
 echo ""
 echo "Installing dependencies..."

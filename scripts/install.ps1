@@ -50,6 +50,14 @@ if ($hostsContent -match "127\.0\.0\.1\s+$Hostname") {
     }
 }
 
+# Copy example config if none exists
+$Config = Join-Path $OrchDir "mcp-orchestrator.config.json"
+$Example = Join-Path $OrchDir "mcp-orchestrator.config.example.json"
+if (-not (Test-Path $Config) -and (Test-Path $Example)) {
+    Copy-Item $Example $Config
+    Write-Host "  [OK] Created mcp-orchestrator.config.json from example" -ForegroundColor Green
+}
+
 # Install deps and build
 Write-Host "`nInstalling dependencies..."
 Set-Location $OrchDir
