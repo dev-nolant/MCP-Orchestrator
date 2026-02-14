@@ -2,6 +2,17 @@
 
 Connect MCPs locally (via URL or stdio) and automate actions between them. Chain tools from different MCPs—e.g. filesystem `search_files` → memory `create_entities`, or your own MCP combos.
 
+## Contents
+
+- [Setup](#setup)
+- [Config](#config)
+- [Workflows](#workflows)
+- [Easy Install (Mac, Linux, Windows)](#easy-install-mac-linux-windows)
+- [Web UI](#web-ui)
+- [CLI](#cli)
+- [Use as an MCP (Cursor / Claude Desktop)](#use-as-an-mcp-cursor--claude-desktop)
+- [Prerequisites](#prerequisites)
+
 ## Setup
 
 ```bash
@@ -134,7 +145,7 @@ If you installed with auto-start enabled and want to turn it off:
 ```bash
 ./scripts/disable-startup.sh
 ```
-This stops the server and removes the launchd plist. It will not start on next login.
+This stops the server and removes the launch agent. It will not start on next login.
 
 **Linux:**
 ```bash
@@ -161,6 +172,7 @@ The UI lets you:
 
 - **Add MCPs** by URL (e.g. `http://localhost:39300/.../mcp`) or by file/stdio (command, args, cwd)
 - **Build workflows** by chaining actions from your MCPs; use `{{step0}}`, `{{step1}}` in args to pass output between steps
+- **Schedule workflows** to run automatically (cron) via the Schedule tab
 - **Run workflows** and view output
 
 Config is saved to `mcp-orchestrator.config.json` in the project directory.
@@ -175,11 +187,6 @@ npm run workflow -- "Spotify to Pieces"
 ## Run every 30 mins (optional)
 
 To sync Spotify → Pieces automatically every 30 minutes:
-
-**macOS (launchd):** Copy `launchd-spotify-pieces.plist.example` to `~/Library/LaunchAgents/`, update the paths, then:
-```bash
-launchctl load ~/Library/LaunchAgents/com.mcp-orchestrator.spotify-pieces.plist
-```
 
 **Cron:**
 ```cron
