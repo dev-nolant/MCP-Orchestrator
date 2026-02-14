@@ -24,8 +24,13 @@ export function createMcpClient(name: string, config: McpConfig): {
   }
 
   if (config.type === 'stdio') {
+    // Resolve 'node' to process.execPath so spawn works when PATH is minimal (e.g. launchd/systemd)
+    const command =
+      config.command === 'node' || config.command === 'node.exe'
+        ? process.execPath
+        : config.command;
     const transport = new StdioClientTransport({
-      command: config.command,
+      command,
       args: config.args ?? [],
       cwd: config.cwd,
       env: config.env,

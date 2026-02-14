@@ -320,3 +320,8 @@ Authorization: Bearer <your-token>
 **Security:**
 - MCP tokens in `mcp-orchestrator.secrets.json`. Use **Revoke** to invalidate.
 - Tunnel token/URL: use env vars or secrets; never commit.
+
+## Prerequisites
+
+- **Spotify MCP**: Auth with `npm run auth` in `spotify-mcp-server`
+- **Pieces MCP**: Pieces Desktop running (exposes MCP at the configured URL)

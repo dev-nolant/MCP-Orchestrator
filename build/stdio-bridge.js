@@ -13,8 +13,12 @@ import { isJSONRPCRequest } from '@modelcontextprotocol/sdk/types.js';
  */
 export async function startStdioBridge(mcpName, config) {
     const pendingResponses = new Map();
+    // Resolve 'node' to process.execPath so spawn works when PATH is minimal (e.g. launchd/systemd)
+    const command = config.command === 'node' || config.command === 'node.exe'
+        ? process.execPath
+        : config.command;
     const stdioTransport = new StdioClientTransport({
-        command: config.command,
+        command,
         args: config.args ?? [],
         cwd: config.cwd,
         env: config.env,
