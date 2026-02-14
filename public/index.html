@@ -28,6 +28,7 @@
         <button class="tab" data-tab="workflows">Workflows</button>
         <button class="tab" data-tab="schedule">Schedule</button>
         <button class="tab" data-tab="run">Run</button>
+        <button class="tab" data-tab="tunnel">Public URLs</button>
       </nav>
     </header>
 
@@ -88,6 +89,43 @@
           <p class="placeholder">Run a workflow to see output.</p>
         </div>
       </section>
+
+      <section id="panel-tunnel" class="panel">
+        <div class="panel-header">
+          <h2>Public URLs</h2>
+          <div class="panel-header-actions">
+            <button type="button" class="btn btn-primary" id="tunnel-start-btn">Start tunnel</button>
+            <button type="button" class="btn btn-danger hidden" id="tunnel-stop-btn">Stop tunnel</button>
+          </div>
+        </div>
+        <p class="tunnel-hint">Expose MCPs via Cloudflare tunnel with token auth. <strong>Quick tunnel</strong> (no config): random URL each start. <strong>Named tunnel</strong> (stable URL): set <code>CLOUDFLARE_TUNNEL_TOKEN</code> + <code>CLOUDFLARE_TUNNEL_PUBLIC_URL</code> or add to Secrets. Or <strong>Login to Cloudflare</strong> first to use your linked domain (e.g. <code>spotify.devntdevserver.work</code>).</p>
+        <p id="tunnel-named-hint" class="tunnel-named-hint hidden">Stable URL configured. Your tunnel will use the same hostname every time.</p>
+        <p id="tunnel-cloudflare-login-row" class="tunnel-cloudflare-login-row">
+          <span id="tunnel-cloudflare-status"></span>
+          <button type="button" class="btn btn-ghost" id="tunnel-cloudflare-login-btn">Login to Cloudflare</button>
+        </p>
+        <div id="tunnel-domain-row" class="tunnel-domain-row hidden">
+          <label for="tunnel-domain-input">Domain (from Cloudflare login)</label>
+          <div class="tunnel-domain-input-row">
+            <input type="text" id="tunnel-domain-input" placeholder="devntdevserver.work" />
+            <button type="button" class="btn btn-ghost" id="tunnel-domain-save-btn">Save</button>
+          </div>
+          <p class="tunnel-domain-hint">The domain you linked during Cloudflare login. Each MCP gets a subdomain: <code>spotify.devntdevserver.work</code>, <code>pieces.devntdevserver.work</code>, etc.</p>
+        </div>
+        <div id="tunnel-secure-status" class="tunnel-secure-status hidden">
+          <div class="tunnel-base-url">
+            <label>Base URL</label>
+            <div class="tunnel-value">
+              <code id="tunnel-secure-url"></code>
+              <button type="button" class="btn btn-ghost btn-copy-secure-url" title="Copy base URL">Copy</button>
+            </div>
+            <p id="tunnel-inactive-note" class="tunnel-inactive-note hidden">Tunnel stopped. URL saved—click <strong>Start tunnel</strong> to reconnect.</p>
+          </div>
+        </div>
+        <h3 class="tunnel-mcps-heading">MCPs</h3>
+        <p class="tunnel-subhint">Generate a token for each MCP to share with remote clients. Each token is scoped to that MCP only.</p>
+        <div id="tunnel-mcps-list" class="tunnel-mcps-list"></div>
+      </section>
     </main>
   </div>
 
@@ -103,6 +141,7 @@
           <option value="spin">Spin</option>
           <option value="install">Install</option>
           <option value="config">Config</option>
+          <option value="tunnel">Tunnel</option>
         </select>
         <button type="button" class="btn btn-ghost btn-logs-download" title="Download logs">↓ Download</button>
         <button type="button" class="btn btn-ghost btn-logs-clear" title="Clear logs">Clear</button>

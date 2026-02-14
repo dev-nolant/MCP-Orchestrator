@@ -171,8 +171,74 @@ function showModal(content) {
   document.getElementById('modal-overlay').classList.remove('hidden');
 }
 
+function showTokenModal(token, fullUrl, isRegenerate) {
+  const title = isRegenerate ? 'New token' : 'Token generated';
+  const urlHtml = fullUrl ? `<p class="token-modal-url"><code>${escapeHtml(fullUrl)}</code></p>` : '';
+  showModal(`
+    <h3>${escapeHtml(title)}</h3>
+    <p class="token-modal-warning">Copy it now—it won't be shown again.</p>
+    <div class="token-modal-row">
+      <input type="text" readonly value="${escapeAttr(token)}" class="token-modal-input" id="token-modal-input" />
+      <button type="button" class="btn btn-primary" id="token-modal-copy">Copy</button>
+    </div>
+    ${urlHtml}
+    <div class="modal-actions">
+      <button type="button" class="btn btn-primary" onclick="hideModal()">Done</button>
+    </div>
+  `);
+  const input = document.getElementById('token-modal-input');
+  const copyBtn = document.getElementById('token-modal-copy');
+  input?.select();
+  copyBtn?.addEventListener('click', () => {
+    navigator.clipboard.writeText(token).then(() => {
+      copyBtn.textContent = 'Copied!';
+      setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
+    });
+  });
+}
+
 function hideModal() {
   document.getElementById('modal-overlay').classList.add('hidden');
+}
+
+function showSubdomainEditModal(mcpName, currentSubdomain, baseDomain) {
+  const toValid = (s) => (s || '').toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-') || 'mcp';
+  const preview = baseDomain ? `${toValid(currentSubdomain) || 'mcp'}.${baseDomain}` : '';
+  showModal(`
+    <h3>Edit subdomain for ${escapeHtml(mcpName)}</h3>
+    <p class="tunnel-domain-hint">Change the subdomain used for this MCP's public URL. Use lowercase letters, numbers, and hyphens. Leave blank to use MCP name.</p>
+    <div class="token-modal-row">
+      <label for="subdomain-edit-input">Subdomain</label>
+      <input type="text" id="subdomain-edit-input" value="${escapeAttr(currentSubdomain || '')}" placeholder="${escapeAttr(toValid(mcpName))}" class="token-modal-input" />
+    </div>
+    ${preview ? `<p class="tunnel-domain-hint">Preview: <code>https://<span id="subdomain-preview">${escapeHtml(toValid(currentSubdomain) || toValid(mcpName))}</span>.${escapeHtml(baseDomain)}</code></p>` : ''}
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" id="subdomain-edit-cancel">Cancel</button>
+      <button type="button" class="btn btn-primary" id="subdomain-edit-save">Save</button>
+    </div>
+  `);
+  const input = document.getElementById('subdomain-edit-input');
+  const previewEl = document.getElementById('subdomain-preview');
+  const updatePreview = () => {
+    if (previewEl) previewEl.textContent = toValid(input?.value || '') || toValid(mcpName);
+  };
+  input?.addEventListener('input', updatePreview);
+  input?.focus();
+  document.getElementById('subdomain-edit-cancel')?.addEventListener('click', hideModal);
+  document.getElementById('subdomain-edit-save')?.addEventListener('click', async () => {
+    const raw = input?.value?.trim() || '';
+    const value = raw ? raw : null;
+    try {
+      await api('/mcp/' + encodeURIComponent(mcpName) + '/tunnel-subdomain', {
+        method: 'PATCH',
+        body: JSON.stringify({ tunnelSubdomain: value }),
+      });
+      hideModal();
+      await renderTunnelPanel();
+    } catch (err) {
+      alert(err?.message || err?.error || 'Failed to update subdomain');
+    }
+  });
 }
 
 function formatLogTime(iso) {
@@ -261,7 +327,7 @@ function hideLogsPanel() {
 
 const TAB_STORAGE_KEY = 'mcp-orchestrator-tab';
 const MCP_SUB_STORAGE_KEY = 'mcp-orchestrator-mcp-sub';
-const VALID_TABS = ['mcps', 'workflows', 'schedule', 'run'];
+const VALID_TABS = ['mcps', 'workflows', 'schedule', 'run', 'tunnel'];
 
 function activateMainTab(tabId) {
   const tab = document.querySelector(`.tab[data-tab="${tabId}"]`);
@@ -273,6 +339,7 @@ function activateMainTab(tabId) {
   if (tabId === 'run') renderRunPanel();
   if (tabId === 'schedule') renderSchedulePanel();
   if (tabId === 'mcps') checkMcpStatus();
+  if (tabId === 'tunnel') renderTunnelPanel();
 }
 
 function initTabs() {
@@ -583,6 +650,276 @@ function initMcpSubTabs() {
   });
 }
 
+async function renderTunnelPanel() {
+  const mcpsListEl = document.getElementById('tunnel-mcps-list');
+  const secureStatusEl = document.getElementById('tunnel-secure-status');
+  const secureUrlEl = document.getElementById('tunnel-secure-url');
+  const startBtn = document.getElementById('tunnel-start-btn');
+  const stopBtn = document.getElementById('tunnel-stop-btn');
+  const namedHint = document.getElementById('tunnel-named-hint');
+  if (!mcpsListEl) return;
+
+  try {
+    const status = await api('/tunnel/status');
+    const secure = status.secure;
+    const securePersisted = status.securePersisted;
+    const tokenMcps = status.tokenMcps || [];
+    const baseUrl = secure?.url || securePersisted?.url;
+    const mcps = Object.keys(config.mcps);
+
+    if (namedHint) namedHint.classList.toggle('hidden', !status.isNamedConfigured);
+
+    const loginStatus = document.getElementById('tunnel-cloudflare-status');
+    const loginBtn = document.getElementById('tunnel-cloudflare-login-btn');
+    if (loginStatus && loginBtn) {
+      if (status.isCloudflareLoggedIn) {
+        loginStatus.textContent = 'Cloudflare: logged in';
+        loginStatus.classList.add('tunnel-logged-in');
+        loginBtn.textContent = 'Re-login';
+      } else {
+        loginStatus.textContent = '';
+        loginStatus.classList.remove('tunnel-logged-in');
+        loginBtn.textContent = 'Login to Cloudflare';
+      }
+    }
+
+    const domainRow = document.getElementById('tunnel-domain-row');
+    const domainInput = document.getElementById('tunnel-domain-input');
+    if (domainRow && domainInput) {
+      domainRow.classList.toggle('hidden', !status.isCloudflareLoggedIn);
+      if (status.baseDomain) domainInput.value = status.baseDomain;
+    }
+
+    const inactiveNote = document.getElementById('tunnel-inactive-note');
+    const hasSubdomainUrls = Object.keys(status.subdomainUrls || {}).length > 0;
+    const showBaseUrlBlock = !hasSubdomainUrls && baseUrl;
+    if (secure) {
+      startBtn?.classList.add('hidden');
+      stopBtn?.classList.remove('hidden');
+      if (secureStatusEl) {
+        secureStatusEl.classList.toggle('hidden', hasSubdomainUrls);
+        secureStatusEl.classList.remove('tunnel-inactive');
+      }
+      if (secureUrlEl) secureUrlEl.textContent = baseUrl || '';
+      inactiveNote?.classList.add('hidden');
+    } else {
+      startBtn?.classList.remove('hidden');
+      startBtn && (startBtn.disabled = false);
+      startBtn && (startBtn.textContent = 'Start tunnel');
+      stopBtn?.classList.add('hidden');
+      if (secureStatusEl) {
+        secureStatusEl.classList.toggle('hidden', hasSubdomainUrls || !baseUrl);
+        secureStatusEl.classList.add('tunnel-inactive');
+      }
+      if (secureUrlEl) secureUrlEl.textContent = baseUrl || '';
+      inactiveNote?.classList.toggle('hidden', !showBaseUrlBlock);
+    }
+
+    if (mcps.length === 0) {
+      mcpsListEl.innerHTML = '<div class="empty-state">No MCPs configured. Add MCPs in the MCPs tab first.</div>';
+      return;
+    }
+
+    const subdomainUrls = status.subdomainUrls || {};
+    mcpsListEl.innerHTML = mcps
+      .map((name) => {
+        const mcp = config.mcps[name];
+        const typeLabel = mcp?.type === 'url' ? 'URL' : 'stdio';
+        const hasToken = tokenMcps.includes(name);
+        const fullUrl = subdomainUrls[name] || (baseUrl ? `${baseUrl}/tunnel/${encodeURIComponent(name)}` : null);
+
+        const tunnelSubdomains = status.tunnelSubdomains || {};
+        const toSub = (s) => (s || '').toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-') || 'mcp';
+        const currentSub = tunnelSubdomains[name] ?? (fullUrl ? (fullUrl.match(/^https:\/\/([^.]+)\./)?.[1] ?? null) : null) ?? toSub(name);
+        const editSubdomainBtn = status.baseDomain ? `<button type="button" class="btn btn-ghost btn-edit-subdomain" data-name="${escapeAttr(name)}" data-sub="${escapeAttr(currentSub)}" title="Edit subdomain">Edit subdomain</button>` : '';
+
+        if (hasToken) {
+          return `
+            <div class="tunnel-mcp-row tunnel-mcp-active" data-name="${escapeAttr(name)}">
+              <div class="tunnel-mcp-info">
+                <span class="tunnel-mcp-name">${escapeHtml(name)}</span>
+                <span class="tunnel-mcp-type">${escapeHtml(typeLabel)}</span>
+              </div>
+              <div class="tunnel-mcp-token">
+                <span class="tunnel-token-status">Token stored</span>
+                ${fullUrl ? `<code class="tunnel-url-code">${escapeHtml(fullUrl)}</code>` : ''}
+                <div class="tunnel-mcp-actions">
+                  ${editSubdomainBtn}
+                  ${fullUrl ? `<button type="button" class="btn btn-ghost btn-copy-tunnel-url" data-url="${escapeAttr(fullUrl)}" title="Copy URL">Copy URL</button>` : ''}
+                  <button type="button" class="btn btn-ghost btn-regenerate-token" data-mcp="${escapeAttr(name)}">Regenerate token</button>
+                  <button type="button" class="btn btn-ghost btn-revoke-token" data-mcp="${escapeAttr(name)}">Revoke</button>
+                </div>
+              </div>
+            </div>
+          `;
+        }
+
+        return `
+          <div class="tunnel-mcp-row" data-name="${escapeAttr(name)}">
+            <div class="tunnel-mcp-info">
+              <span class="tunnel-mcp-name">${escapeHtml(name)}</span>
+              <span class="tunnel-mcp-type">${escapeHtml(typeLabel)}</span>
+            </div>
+            <div class="tunnel-mcp-actions">
+              ${editSubdomainBtn}
+              <button type="button" class="btn btn-primary btn-generate-tunnel-token" data-mcp="${escapeAttr(name)}">Generate token</button>
+            </div>
+          </div>
+        `;
+      })
+      .join('');
+
+    mcpsListEl.querySelectorAll('.btn-generate-tunnel-token').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        btn.textContent = 'Generating…';
+        try {
+          const data = await api('/tunnel/token/' + encodeURIComponent(btn.dataset.mcp), { method: 'POST' });
+          await renderTunnelPanel();
+          await loadLogs();
+          if (data.token) {
+            showTokenModal(data.token, data.fullUrl || null, false);
+          }
+        } catch (err) {
+          btn.disabled = false;
+          btn.textContent = 'Generate token';
+          alert(err?.message || err?.error || 'Failed to generate token');
+        }
+      });
+    });
+
+    mcpsListEl.querySelectorAll('.btn-regenerate-token').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Regenerate token? The old token will stop working.')) return;
+        try {
+          const data = await api('/tunnel/token/' + encodeURIComponent(btn.dataset.mcp), { method: 'POST' });
+          await renderTunnelPanel();
+          await loadLogs();
+          if (data.token) {
+            showTokenModal(data.token, data.fullUrl || null, true);
+          }
+        } catch (err) {
+          alert(err?.message || err?.error || 'Failed to regenerate');
+        }
+      });
+    });
+
+    mcpsListEl.querySelectorAll('.btn-revoke-token').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        try {
+          await api('/tunnel/token/' + encodeURIComponent(btn.dataset.mcp), { method: 'DELETE' });
+          await renderTunnelPanel();
+          await loadLogs();
+        } catch (err) {
+          alert(err?.message || err?.error || 'Failed to revoke');
+        }
+      });
+    });
+
+    mcpsListEl.querySelectorAll('.btn-copy-tunnel-url').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const url = btn.dataset.url?.trim();
+        if (url) {
+          navigator.clipboard.writeText(url).then(() => {
+            const orig = btn.textContent;
+            btn.textContent = 'Copied!';
+            setTimeout(() => { btn.textContent = orig; }, 1500);
+          });
+        }
+      });
+    });
+
+    mcpsListEl.querySelectorAll('.btn-edit-subdomain').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const name = btn.dataset.name;
+        const currentSub = btn.dataset.sub || '';
+        const baseDomain = status.baseDomain?.replace(/^\.+/, '') || '';
+        showSubdomainEditModal(name, currentSub, baseDomain);
+      });
+    });
+  } catch {
+    mcpsListEl.innerHTML = '<div class="empty-state">Failed to load tunnel status.</div>';
+  }
+}
+
+function initTunnelPanel() {
+  const startBtn = document.getElementById('tunnel-start-btn');
+  const stopBtn = document.getElementById('tunnel-stop-btn');
+  const loginBtn = document.getElementById('tunnel-cloudflare-login-btn');
+
+  const domainSaveBtn = document.getElementById('tunnel-domain-save-btn');
+  const domainInput = document.getElementById('tunnel-domain-input');
+  domainSaveBtn?.addEventListener('click', async () => {
+    const domain = domainInput?.value?.trim();
+    if (!domain) {
+      alert('Enter a domain (e.g. mcp.example.com)');
+      return;
+    }
+    try {
+      await api('/tunnel/domain', { method: 'PUT', body: JSON.stringify({ domain }) });
+      await renderTunnelPanel();
+    } catch (err) {
+      alert(err?.message || err?.error || 'Failed to save domain');
+    }
+  });
+
+  loginBtn?.addEventListener('click', async () => {
+    loginBtn.disabled = true;
+    loginBtn.textContent = 'Opening browser…';
+    try {
+      const result = await api('/tunnel/cloudflare/login', { method: 'POST', body: '{}' });
+      await renderTunnelPanel();
+      await loadLogs();
+      if (result.success) {
+        alert(result.message);
+      } else {
+        alert(result.message || 'Login failed');
+      }
+    } catch (err) {
+      alert(err?.message || err?.error || 'Login failed');
+    } finally {
+      loginBtn.disabled = false;
+    }
+  });
+
+  startBtn?.addEventListener('click', async () => {
+    startBtn.disabled = true;
+    startBtn.textContent = 'Starting…';
+    try {
+      await api('/tunnel/start', { method: 'POST', body: '{}' });
+      await renderTunnelPanel();
+      await loadLogs();
+    } catch (err) {
+      startBtn.disabled = false;
+      startBtn.textContent = 'Start tunnel';
+      alert(err?.message || err?.error || 'Failed to start tunnel. Install cloudflared: brew install cloudflared');
+    }
+  });
+
+  stopBtn?.addEventListener('click', async () => {
+    try {
+      await api('/tunnel/stop', { method: 'POST', body: '{}' });
+      await renderTunnelPanel();
+      await loadLogs();
+    } catch (err) {
+      alert(err?.message || err?.error || 'Failed to stop');
+    }
+  });
+
+  document.getElementById('panel-tunnel')?.addEventListener('click', (e) => {
+    const copyBtn = e.target.closest('.btn-copy-tunnel-url, .btn-copy-secure-url');
+    if (!copyBtn) return;
+    const url = copyBtn.dataset?.url?.trim() || document.getElementById('tunnel-secure-url')?.textContent?.trim();
+    if (url) {
+      navigator.clipboard.writeText(url).then(() => {
+        const orig = copyBtn.textContent;
+        copyBtn.textContent = 'Copied!';
+        setTimeout(() => { copyBtn.textContent = orig; }, 1500);
+      });
+    }
+  });
+}
+
 function showMcpModal(existingName = null) {
   const mcp = existingName ? config.mcps[existingName] : null;
   const isUrl = mcp ? mcp.type === 'url' : true;
@@ -610,6 +947,17 @@ function showMcpModal(existingName = null) {
           <label>Request timeout (ms, optional)</label>
           <input type="number" name="requestTimeout" value="${mcp?.requestTimeout ?? ''}" placeholder="120000 = 2 min (default)" min="10000" step="1000" />
           <div class="form-row-hint">Increase if tools like Pieces memory creation timeout. Default 120000.</div>
+        </div>
+        <div class="form-row">
+          <label>Bearer token (optional)</label>
+          <div class="token-controls">
+            <input type="text" name="authorizationToken" value="${escapeAttr(mcp?.authorizationToken || '')}" placeholder="env:VAR_NAME or secret:key" />
+            <div class="token-buttons">
+              <button type="button" class="btn btn-ghost btn-generate-token" title="Generate random token and store securely">Generate</button>
+              <button type="button" class="btn btn-ghost btn-store-token" title="Paste and store a token">Store custom</button>
+            </div>
+          </div>
+          <div class="form-row-hint">Use <code>env:VAR_NAME</code> to read from process.env, or <code>secret:key</code> to use a stored token. Or generate/store one above.</div>
         </div>
       </div>
       <div id="mcp-stdio-fields" style="${isUrl ? 'display:none' : ''}">
@@ -653,6 +1001,43 @@ function showMcpModal(existingName = null) {
     });
   });
 
+  form.querySelector('.btn-generate-token')?.addEventListener('click', async () => {
+    const name = form.querySelector('input[name="name"]')?.value?.trim();
+    if (!name) {
+      alert('Enter MCP name first');
+      return;
+    }
+    try {
+      const { token } = await api('/secrets/generate', { method: 'POST', body: '{}' });
+      await api('/secrets/' + encodeURIComponent(name), {
+        method: 'PUT',
+        body: JSON.stringify({ value: token }),
+      });
+      form.querySelector('input[name="authorizationToken"]').value = `secret:${name}`;
+    } catch (err) {
+      alert(err?.message || 'Failed to generate token');
+    }
+  });
+
+  form.querySelector('.btn-store-token')?.addEventListener('click', async () => {
+    const name = form.querySelector('input[name="name"]')?.value?.trim();
+    if (!name) {
+      alert('Enter MCP name first');
+      return;
+    }
+    const token = prompt('Paste the Bearer token to store:');
+    if (token === null || !token.trim()) return;
+    try {
+      await api('/secrets/' + encodeURIComponent(name), {
+        method: 'PUT',
+        body: JSON.stringify({ value: token.trim() }),
+      });
+      form.querySelector('input[name="authorizationToken"]').value = `secret:${name}`;
+    } catch (err) {
+      alert(err?.message || 'Failed to store token');
+    }
+  });
+
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(form);
@@ -667,7 +1052,8 @@ function showMcpModal(existingName = null) {
       if (!url) return alert('URL is required');
       const timeoutVal = fd.get('requestTimeout');
       const requestTimeout = timeoutVal && Number(timeoutVal) > 0 ? Number(timeoutVal) : undefined;
-      mcpConfig = { type: 'url', url, ...(requestTimeout ? { requestTimeout } : {}), startOnStartup: startOnStartup || undefined };
+      const authToken = fd.get('authorizationToken')?.trim() || undefined;
+      mcpConfig = { type: 'url', url, ...(requestTimeout ? { requestTimeout } : {}), ...(authToken ? { authorizationToken: authToken } : {}), startOnStartup: startOnStartup || undefined };
     } else {
       const argsStr = fd.get('args').trim();
       let args = [];
@@ -1474,11 +1860,13 @@ async function init() {
 
   initTabs();
   initMcpSubTabs();
+  initTunnelPanel();
 
   try {
     await loadConfig();
     await loadTools();
     renderMcpsPanel();
+    renderTunnelPanel();
     checkMcpStatus();
     renderWorkflowsPanel();
     renderSchedulePanel();

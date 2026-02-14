@@ -4,7 +4,9 @@
 # Run in PowerShell (as Administrator for hosts file): .\scripts\install.ps1 [-NoStartup]
 
 param(
-    [switch]$NoStartup
+    [switch]$NoStartup,
+    [switch]$Cloudflared,
+    [switch]$NoCloudflared
 )
 
 $ErrorActionPreference = "Stop"
@@ -32,6 +34,52 @@ try {
 } catch {
     Write-Host "Error: Node.js is required. Install from https://nodejs.org" -ForegroundColor Red
     exit 1
+}
+
+# Cloudflared install (for Public URLs / tunnels)
+$InstallCloudflared = $null
+if ($Cloudflared) { $InstallCloudflared = $true }
+if ($NoCloudflared) { $InstallCloudflared = $false }
+if ($null -eq $InstallCloudflared) {
+    Write-Host ""
+    Write-Host "Install cloudflared? (required for Public URLs / tunnels)" -ForegroundColor Cyan
+    Write-Host "  1) Yes"
+    Write-Host "  2) No"
+    Write-Host ""
+    $choice = Read-Host "Choice [1-2] (default: 2)"
+    if ([string]::IsNullOrWhiteSpace($choice)) { $choice = "2" }
+    $InstallCloudflared = ($choice -eq "1")
+}
+
+if ($InstallCloudflared) {
+    Write-Host ""
+    Write-Host "Installing cloudflared..." -ForegroundColor Cyan
+    $cloudflaredInstalled = $false
+    if (Get-Command cloudflared -ErrorAction SilentlyContinue) {
+        Write-Host "  [OK] cloudflared already installed" -ForegroundColor Green
+        $cloudflaredInstalled = $true
+    } elseif (Get-Command winget -ErrorAction SilentlyContinue) {
+        Write-Host "  Installing cloudflared via winget..."
+        winget install Cloudflare.cloudflared --accept-source-agreements --accept-package-agreements 2>$null
+        if (Get-Command cloudflared -ErrorAction SilentlyContinue) {
+            Write-Host "  [OK] cloudflared installed" -ForegroundColor Green
+            $cloudflaredInstalled = $true
+        } else {
+            Write-Host "  [!] winget install may have failed. Try: winget install Cloudflare.cloudflared" -ForegroundColor Yellow
+        }
+    } elseif (Get-Command choco -ErrorAction SilentlyContinue) {
+        Write-Host "  Installing cloudflared via Chocolatey..."
+        choco install cloudflared -y 2>$null
+        if (Get-Command cloudflared -ErrorAction SilentlyContinue) {
+            Write-Host "  [OK] cloudflared installed" -ForegroundColor Green
+            $cloudflaredInstalled = $true
+        } else {
+            Write-Host "  [!] choco install may have failed. Try: choco install cloudflared" -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "  [!] winget/choco not found. Install cloudflared manually:" -ForegroundColor Yellow
+        Write-Host "      https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/download-and-install/" -ForegroundColor Gray
+    }
 }
 
 # Add mcporch.local to hosts if missing

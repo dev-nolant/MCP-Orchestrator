@@ -181,6 +181,292 @@ body {
   display: none;
 }
 
+.tunnel-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.tunnel-card h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem 0;
+}
+
+.tunnel-hint {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  margin: 0 0 1rem 0;
+}
+
+.tunnel-url-row,
+.tunnel-token-row {
+  margin-bottom: 1rem;
+}
+
+.tunnel-url-row label,
+.tunnel-token-row label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 0.35rem;
+}
+
+.tunnel-value {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.tunnel-value code {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  word-break: break-all;
+}
+
+.tunnel-warning {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin: 0 0 1rem 0;
+}
+
+.tunnel-card .hidden {
+  display: none;
+}
+
+.tunnel-inactive-message {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  margin: 1rem 0;
+  padding: 1.25rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.tunnel-base-url {
+  margin-bottom: 1.5rem;
+}
+
+.tunnel-base-url label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 0.35rem;
+}
+
+.tunnel-mcps-heading {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 1.5rem 0 0.5rem 0;
+}
+
+.tunnel-subhint {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin: 0 0 1rem 0;
+}
+
+.tunnel-format-note {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin: 0 0 1.5rem 0;
+}
+
+.tunnel-format-note a {
+  color: var(--accent);
+}
+
+.tunnel-inactive-note {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin: 0.5rem 0 0 0;
+}
+
+.tunnel-mcps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.tunnel-mcp-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  flex-wrap: wrap;
+}
+
+.tunnel-mcp-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tunnel-mcp-name {
+  font-weight: 600;
+}
+
+.tunnel-mcp-type {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.tunnel-mcp-token {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.tunnel-mcp-token .tunnel-token-code {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  padding: 0.4rem 0.6rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  word-break: break-all;
+  max-width: 280px;
+}
+
+.tunnel-mcp-actions {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.tunnel-mcp-url-value {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  min-width: 0;
+  flex: 1;
+}
+
+.tunnel-mcp-url-value .tunnel-url-code {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  padding: 0.4rem 0.6rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  word-break: break-all;
+  flex: 1;
+  min-width: 200px;
+}
+
+.tunnel-not-tunnelable {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.token-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.token-controls input {
+  flex: 1;
+  min-width: 0;
+}
+
+.token-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.tunnel-secure-status {
+  margin-bottom: 1.5rem;
+}
+
+.tunnel-named-hint {
+  font-size: 0.9rem;
+  color: var(--success);
+  margin-bottom: 0.5rem;
+}
+
+.tunnel-cloudflare-login-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.tunnel-logged-in {
+  color: var(--success);
+  font-size: 0.9rem;
+}
+
+.tunnel-domain-row {
+  margin-bottom: 1rem;
+}
+
+.tunnel-domain-row label {
+  display: block;
+  font-size: 0.9rem;
+  margin-bottom: 0.25rem;
+}
+
+.tunnel-domain-input-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.tunnel-domain-input-row input {
+  flex: 1;
+  max-width: 280px;
+  padding: 0.35rem 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.tunnel-domain-hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.35rem;
+}
+
+.tunnel-token-status {
+  font-size: 0.85rem;
+  color: var(--success);
+}
+
+.tunnel-last-url {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+
+.tunnel-mcp-stdio {
+  opacity: 0.7;
+}
+
 .mcp-checking-spinner {
   display: inline-block;
   width: 18px;
@@ -1300,6 +1586,11 @@ body {
   color: var(--text-muted);
 }
 
+.log-type-badge.tunnel {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--success);
+}
+
 .log-time {
   font-size: 0.7rem;
   color: var(--text-muted);
@@ -1403,6 +1694,38 @@ body {
   gap: 0.5rem;
   justify-content: flex-end;
   margin-top: 1.5rem;
+}
+
+.token-modal-warning {
+  margin: 0 0 1rem 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.token-modal-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.token-modal-input {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.token-modal-url {
+  margin: 1rem 0 0 0;
+  font-size: 0.85rem;
+}
+
+.token-modal-url code {
+  font-family: var(--font-mono);
+  word-break: break-all;
 }
 
 .loading {

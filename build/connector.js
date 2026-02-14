@@ -1,9 +1,16 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { resolveAuthorizationToken } from './auth-resolver.js';
 export function createMcpClient(name, config) {
     if (config.type === 'url') {
-        const transport = new StreamableHTTPClientTransport(new URL(config.url));
+        const token = resolveAuthorizationToken(config.authorizationToken);
+        const requestInit = token
+            ? { headers: { Authorization: `Bearer ${token}` } }
+            : undefined;
+        const transport = new StreamableHTTPClientTransport(new URL(config.url), {
+            requestInit,
+        });
         const client = new Client({ name: `mcp-orchestrator-${name}`, version: '0.1.0' }, {});
         return { client, transport };
     }

@@ -13,9 +13,12 @@ PID_FILE="$ORCH_DIR/.mcp-orchestrator.pid"
 HOSTS_LINE="127.0.0.1 $HOSTNAME"
 
 NO_STARTUP=false
+INSTALL_CLOUDFLARED=""
 for arg in "$@"; do
   case "$arg" in
     --no-startup) NO_STARTUP=true ;;
+    --cloudflared) INSTALL_CLOUDFLARED=yes ;;
+    --no-cloudflared) INSTALL_CLOUDFLARED=no ;;
   esac
 done
 
@@ -49,6 +52,53 @@ add_hosts() {
     echo "  You can still use http://localhost:$PORT"
   fi
 }
+
+# Cloudflared install (for Public URLs / tunnels)
+install_cloudflared() {
+  if command -v cloudflared &>/dev/null; then
+    echo "  ✓ cloudflared already installed ($(cloudflared --version 2>/dev/null | head -1 || echo 'cloudflared'))"
+    return 0
+  fi
+  if [ "$(uname)" = "Darwin" ]; then
+    if command -v brew &>/dev/null; then
+      echo "  Installing cloudflared via Homebrew..."
+      brew install cloudflared && echo "  ✓ cloudflared installed" || echo "  ⚠ cloudflared install failed. Run: brew install cloudflared"
+    else
+      echo "  ⚠ Homebrew not found. Install cloudflared manually: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/download-and-install/"
+    fi
+  else
+    if command -v apt-get &>/dev/null; then
+      echo "  Installing cloudflared via apt..."
+      sudo apt-get update -qq && sudo apt-get install -y cloudflared 2>/dev/null && echo "  ✓ cloudflared installed" || echo "  ⚠ Try: sudo apt-get install cloudflared"
+    elif command -v dnf &>/dev/null; then
+      echo "  Installing cloudflared via dnf..."
+      sudo dnf install -y cloudflared 2>/dev/null && echo "  ✓ cloudflared installed" || echo "  ⚠ Try: sudo dnf install cloudflared"
+    else
+      echo "  ⚠ Install cloudflared manually: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/download-and-install/"
+    fi
+  fi
+}
+
+if [ -z "$INSTALL_CLOUDFLARED" ]; then
+  if [ -t 0 ]; then
+    echo ""
+    echo "Install cloudflared? (required for Public URLs / tunnels)"
+    echo "  1) Yes"
+    echo "  2) No"
+    echo ""
+    read -r -p "Choice [1-2] (default: 2): " choice
+    choice="${choice:-2}"
+    [ "$choice" = "1" ] && INSTALL_CLOUDFLARED=yes || INSTALL_CLOUDFLARED=no
+  else
+    INSTALL_CLOUDFLARED=no
+  fi
+fi
+
+if [ "$INSTALL_CLOUDFLARED" = "yes" ]; then
+  echo ""
+  echo "Installing cloudflared..."
+  install_cloudflared
+fi
 
 # Copy example config if none exists
 CONFIG="$ORCH_DIR/mcp-orchestrator.config.json"

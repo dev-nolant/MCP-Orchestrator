@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { randomBytes } from 'node:crypto';
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -6,7 +7,32 @@ import { runWorkflow } from './workflow.js';
 import { startScheduler } from './scheduler.js';
 import { appendLog, getLogs, clearLogs } from './logs.js';
 import { loadConfig, saveConfig } from './config-loader.js';
+import { startOrchestratorTunnel, stopOrchestratorTunnel, getOrchestratorTunnelUrl, getOrchestratorTunnelPersisted, isCloudflareTunnelActive, isNamedTunnelConfigured, isCloudflareLoggedIn, runCloudflareLogin, getTunnelBaseDomain, } from './tunnel.js';
+import { getSecret, setSecret, deleteSecret, listSecretKeys } from './secrets.js';
+import { setTunnelToken, deleteTunnelToken, generateTunnelToken, getTunnelTokenMcpNames } from './tunnel-tokens.js';
+import { handleTunnelProxy } from './tunnel-proxy.js';
+import { toTunnelSubdomain } from './config.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+process.on('uncaughtException', (err) => {
+    console.error('[tunnel] Uncaught exception:', err);
+    appendLog({
+        type: 'tunnel',
+        message: `Uncaught exception: ${err.message}`,
+        detail: null,
+        output: { stack: err.stack },
+        success: false,
+    });
+});
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('[tunnel] Unhandled rejection:', reason);
+    appendLog({
+        type: 'tunnel',
+        message: `Unhandled rejection: ${String(reason)}`,
+        detail: null,
+        output: null,
+        success: false,
+    });
+});
 async function main() {
     // Apply startOnStartup: spin up MCPs that should start when the server starts
     const initialConfig = loadConfig();
@@ -21,6 +47,54 @@ async function main() {
     if (configChanged)
         saveConfig(initialConfig);
     const app = express();
+    // Subdomain routing: when Host is {mcpName}.{baseDomain}, proxy to that MCP
+    app.use((req, res, next) => {
+        const baseDomain = getTunnelBaseDomain();
+        if (!baseDomain)
+            return next();
+        const host = (req.headers.host ?? '').split(':')[0].toLowerCase();
+        const domain = baseDomain.toLowerCase().replace(/^\.+/, '');
+        if (!host.endsWith('.' + domain) && host !== domain)
+            return next();
+        const subdomain = host.slice(0, -(domain.length + 1));
+        if (!subdomain)
+            return next();
+        const config = loadConfig();
+        const mcpName = Object.keys(config.mcps).find((k) => toTunnelSubdomain(k, config.mcps[k]) === subdomain);
+        if (!mcpName)
+            return next();
+        handleTunnelProxy(req, res, mcpName, { subdomainRouting: true }).catch((err) => {
+            const errMsg = err instanceof Error ? err.message : String(err);
+            appendLog({ type: 'tunnel', message: `Subdomain proxy error for ${mcpName}: ${errMsg}`, detail: req.url ?? undefined, output: err instanceof Error ? { stack: err.stack } : null, success: false });
+            if (!res.headersSent) {
+                res.statusCode = 500;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ error: errMsg }));
+            }
+        });
+    });
+    // Tunnel proxy must run before express.json() so we get raw body for forwarding
+    const tunnelProxyHandler = (req, res) => {
+        const mcpName = req.params.mcpName;
+        handleTunnelProxy(req, res, mcpName).catch((err) => {
+            const errMsg = err instanceof Error ? err.message : String(err);
+            appendLog({
+                type: 'tunnel',
+                message: `Tunnel proxy unhandled error for ${mcpName}: ${errMsg}`,
+                detail: req.url ?? undefined,
+                output: err instanceof Error ? { stack: err.stack } : null,
+                success: false,
+            });
+            console.error('[tunnel] Proxy error:', mcpName, errMsg);
+            if (!res.headersSent) {
+                res.status(500);
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ error: errMsg }));
+            }
+        });
+    };
+    app.all('/tunnel/:mcpName', tunnelProxyHandler);
+    app.all('/tunnel/:mcpName/*', tunnelProxyHandler);
     app.use(express.json());
     app.get('/api/config', (_req, res) => {
         res.json(loadConfig());
@@ -177,6 +251,30 @@ async function main() {
                 detail: `${pkgTrim} → ${finalName}`,
             });
             res.json({ ok: true, name: finalName });
+        }
+        catch (err) {
+            res.status(500).json({ error: String(err) });
+        }
+    });
+    app.patch('/api/mcp/:name/tunnel-subdomain', (req, res) => {
+        try {
+            const { name } = req.params;
+            const { tunnelSubdomain } = req.body;
+            const config = loadConfig();
+            const mcp = config.mcps[name];
+            if (!mcp)
+                return res.status(404).json({ error: 'MCP not found' });
+            mcp.tunnelSubdomain =
+                typeof tunnelSubdomain === 'string' && tunnelSubdomain.trim()
+                    ? tunnelSubdomain.trim()
+                    : undefined;
+            saveConfig(config);
+            appendLog({
+                type: 'config',
+                message: `Updated tunnel subdomain for ${name}`,
+                detail: mcp.tunnelSubdomain || '(default)',
+            });
+            res.json({ ok: true, tunnelSubdomain: mcp.tunnelSubdomain });
         }
         catch (err) {
             res.status(500).json({ error: String(err) });
@@ -352,6 +450,153 @@ async function main() {
         }
         catch (err) {
             res.status(500).json({ error: String(err) });
+        }
+    });
+    app.get('/api/tunnel/status', (_req, res) => {
+        const secureUrl = getOrchestratorTunnelUrl();
+        const securePersisted = getOrchestratorTunnelPersisted();
+        const tokenMcps = getTunnelTokenMcpNames();
+        const baseDomain = getTunnelBaseDomain();
+        const config = loadConfig();
+        const mcpNames = Object.keys(config.mcps);
+        const domain = baseDomain?.replace(/^\.+/, '') ?? '';
+        const subdomainUrls = domain && mcpNames.length
+            ? Object.fromEntries(mcpNames.map((n) => [
+                n,
+                `https://${toTunnelSubdomain(n, config.mcps[n])}.${domain}`,
+            ]))
+            : null;
+        const tunnelSubdomains = Object.fromEntries(mcpNames.map((n) => [n, config.mcps[n]?.tunnelSubdomain ?? null]));
+        res.json({
+            secure: secureUrl ? { url: secureUrl, cloudflare: isCloudflareTunnelActive() } : null,
+            securePersisted: securePersisted ? { url: securePersisted.url } : null,
+            tokenMcps,
+            isNamedConfigured: isNamedTunnelConfigured(),
+            isCloudflareLoggedIn: isCloudflareLoggedIn(),
+            baseDomain: baseDomain || null,
+            subdomainUrls,
+            tunnelSubdomains,
+        });
+    });
+    app.put('/api/tunnel/domain', (req, res) => {
+        try {
+            const { domain } = req.body;
+            const d = typeof domain === 'string' ? domain.trim() : '';
+            if (!d) {
+                return res.status(400).json({ error: 'domain required' });
+            }
+            setSecret('cloudflare_tunnel_domain', d);
+            res.json({ ok: true, domain: d });
+        }
+        catch (err) {
+            res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+        }
+    });
+    app.post('/api/tunnel/cloudflare/login', async (_req, res) => {
+        try {
+            const result = await runCloudflareLogin();
+            res.json(result);
+        }
+        catch (err) {
+            res.status(500).json({
+                success: false,
+                message: err instanceof Error ? err.message : String(err),
+            });
+        }
+    });
+    app.post('/api/secrets/generate', (_req, res) => {
+        const token = randomBytes(32).toString('hex');
+        res.json({ token });
+    });
+    app.get('/api/secrets/keys', (_req, res) => {
+        res.json({ keys: listSecretKeys() });
+    });
+    app.get('/api/secrets/:key', (req, res) => {
+        const { key } = req.params;
+        const value = getSecret(key);
+        if (value === null)
+            return res.status(404).json({ error: 'Not found' });
+        res.json({ key, hasValue: true });
+    });
+    app.put('/api/secrets/:key', (req, res) => {
+        try {
+            const { key } = req.params;
+            const { value } = req.body;
+            if (!key || typeof value !== 'string') {
+                return res.status(400).json({ error: 'key and value required' });
+            }
+            setSecret(key, value);
+            res.json({ ok: true });
+        }
+        catch (err) {
+            res.status(500).json({ error: String(err) });
+        }
+    });
+    app.delete('/api/secrets/:key', (req, res) => {
+        const { key } = req.params;
+        deleteSecret(key);
+        res.json({ ok: true });
+    });
+    app.post('/api/tunnel/start', async (req, res) => {
+        try {
+            const port = Number(process.env.PORT ?? 3847);
+            const config = loadConfig();
+            const mcps = Object.entries(config.mcps).map(([name, cfg]) => ({ name, config: cfg }));
+            const { url } = await startOrchestratorTunnel(port, { mcps });
+            appendLog({ type: 'tunnel', message: 'Cloudflare tunnel started', detail: url });
+            res.json({ url });
+        }
+        catch (err) {
+            res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+        }
+    });
+    app.post('/api/tunnel/stop', (req, res) => {
+        try {
+            const stopped = stopOrchestratorTunnel();
+            if (stopped)
+                appendLog({ type: 'tunnel', message: 'Cloudflare tunnel stopped', detail: null });
+            res.json({ ok: true, stopped });
+        }
+        catch (err) {
+            res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+        }
+    });
+    app.post('/api/tunnel/token/:mcpName', (req, res) => {
+        try {
+            const { mcpName } = req.params;
+            const config = loadConfig();
+            if (!config.mcps[mcpName]) {
+                return res.status(404).json({ error: `MCP "${mcpName}" not found` });
+            }
+            const token = generateTunnelToken();
+            setTunnelToken(mcpName, token);
+            const baseDomain = getTunnelBaseDomain();
+            const domain = baseDomain?.replace(/^\.+/, '');
+            let fullUrl = null;
+            if (domain) {
+                const sub = toTunnelSubdomain(mcpName, config.mcps[mcpName]);
+                fullUrl = `https://${sub}.${domain}`;
+            }
+            else {
+                const baseUrl = getOrchestratorTunnelUrl() ?? getOrchestratorTunnelPersisted()?.url;
+                if (baseUrl)
+                    fullUrl = `${baseUrl}/tunnel/${encodeURIComponent(mcpName)}`;
+            }
+            appendLog({ type: 'tunnel', message: `Token generated for ${mcpName}`, detail: null });
+            res.json({ mcpName, token, fullUrl });
+        }
+        catch (err) {
+            res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+        }
+    });
+    app.delete('/api/tunnel/token/:mcpName', (req, res) => {
+        try {
+            const { mcpName } = req.params;
+            deleteTunnelToken(mcpName);
+            res.json({ ok: true });
+        }
+        catch (err) {
+            res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
         }
     });
     app.post('/mcp', async (req, res) => {
