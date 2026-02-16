@@ -316,9 +316,9 @@ async function startNamedTunnel(port: number): Promise<{ url: string }> {
   });
 }
 
-const TUNNEL_NAME = 'mcp-orchestrator';
-const CREDENTIALS_PATH = path.join(CLOUDFLARED_DIR, 'mcp-orchestrator-credentials.json');
-const CONFIG_PATH = path.join(CLOUDFLARED_DIR, 'mcp-orchestrator-config.yml');
+const TUNNEL_NAME = (process.env.MCP_ORCHESTRATOR_TUNNEL_NAME?.trim() || 'mcp-orchestrator').replace(/[/\\:*?"<>|]/g, '-');
+const CREDENTIALS_PATH = path.join(CLOUDFLARED_DIR, `${TUNNEL_NAME}-credentials.json`);
+const CONFIG_PATH = path.join(CLOUDFLARED_DIR, `${TUNNEL_NAME}-config.yml`);
 const CLOUDFLARED_TIMEOUT_MS = 90_000; // tunnel create/route can be slow, esp on Windows
 
 const spawnOpts = (): { stdio: ('ignore' | 'pipe')[]; windowsHide?: boolean } => ({
@@ -393,18 +393,22 @@ async function startLoggedInTunnel(
       credentialsPathArg,
       TUNNEL_NAME,
     ]);
-    if (!create.ok && !create.stderr.includes('already exists')) {
-      throw new Error(`Failed to create tunnel: ${create.stderr || create.stdout}`);
-    }
     if (create.ok) {
       appendLog({ type: 'tunnel', message: 'Created Cloudflare tunnel', detail: TUNNEL_NAME, success: true });
+    } else {
+      const stderr = (create.stderr || create.stdout).toLowerCase();
+      if (stderr.includes('already exists') || stderr.includes('already registered')) {
+        // Tunnel exists (e.g. created on another machine) but we have no credentials
+        throw new Error(
+          `Tunnel "${TUNNEL_NAME}" already exists in your Cloudflare account (maybe from another device). ` +
+            `Copy the credentials file from that machine to:\n${CREDENTIALS_PATH}\n\n` +
+            `Or create a different tunnel: set MCP_ORCHESTRATOR_TUNNEL_NAME to a unique name (e.g. mcp-orchestrator-my-pc).`,
+        );
+      }
+      throw new Error(`Failed to create tunnel: ${create.stderr || create.stdout}`);
     }
-    // If tunnel "already exists" in Cloudflare, create won't write credentials - we'd fail on run
     if (!fs.existsSync(CREDENTIALS_PATH)) {
-      throw new Error(
-        `Tunnel "${TUNNEL_NAME}" already exists in Cloudflare but credentials file is missing. ` +
-          'Delete the tunnel in Cloudflare Zero Trust dashboard (Access > Tunnels) and try again, or run: cloudflared tunnel delete mcp-orchestrator',
-      );
+      throw new Error(`Tunnel created but credentials file not found at ${CREDENTIALS_PATH}`);
     }
   }
 
