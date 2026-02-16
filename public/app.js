@@ -1247,7 +1247,7 @@ function initTunnelPanel() {
     } catch (err) {
       startBtn.disabled = false;
       startBtn.textContent = 'Start tunnel';
-      alert(err?.message || err?.error || 'Failed to start tunnel. Install cloudflared: brew install cloudflared');
+      alert(err?.message || err?.error || 'Failed to start tunnel. Install cloudflared: Mac: brew install cloudflared; Windows: winget install Cloudflare.cloudflared');
     }
   });
 
