@@ -14,6 +14,25 @@
 
 Connect MCPs locally (via URL or stdio) and automate actions between them. Chain tools from different MCPs—e.g. filesystem `search_files` → memory `create_entities`, or your own MCP combos.
 
+---
+
+## Orchestrate via MCP
+
+**The MCP Orchestrator exposes itself as an MCP server.** Add it to Cursor, Claude Desktop, or any MCP client and operate the orchestrator entirely from chat—no web UI required.
+
+| What you can do | Tools |
+|-----------------|-------|
+| Run workflows | `run_workflow`, `list_workflows` |
+| Create and edit workflows | `add_workflow`, `update_workflow`, `delete_workflow`, `schedule_workflow`, `unschedule_workflow` |
+| Manage MCP connections | `list_mcps`, `add_mcp`, `remove_mcp`, `enable_mcp`, `disable_mcp` |
+| Test MCPs | `call_tool`, `list_tools`, `get_mcp_status` |
+| Control the tunnel | `start_tunnel`, `stop_tunnel`, `generate_tunnel_token`, `cloudflare_login` |
+| Install MCPs | `search_registry`, `install_from_registry`, `install_npm_mcp` |
+
+**Quick setup:** Add `http://localhost:3847/mcp` (Streamable HTTP) to your MCP client. Read `orchestrator://glossary` first for the full reference.
+
+---
+
 ## Table of Contents
 
 - [Setup](#setup)
@@ -22,8 +41,9 @@ Connect MCPs locally (via URL or stdio) and automate actions between them. Chain
 - [Easy Install (Mac, Linux, Windows)](#easy-install-mac-linux-windows)
 - [Uninstall](#uninstall)
 - [Web UI](#web-ui)
+- [Orchestrate via MCP](#orchestrate-via-mcp) — Run and manage everything from an MCP interface like Claude/Cursor
 - [CLI](#cli)
-- [Use as an MCP (Cursor / Claude Desktop)](#use-as-an-mcp-cursor--claude-desktop)
+- [MCP Tools & Resources (full reference)](#use-as-an-mcp-cursor--claude-desktop)
 - [Public URL (Tunnel)](#public-url-tunnel)
 - [Prerequisites](#prerequisites)
 
@@ -263,15 +283,15 @@ To sync Spotify → Pieces automatically every 30 minutes:
 
 ## Use as an MCP (Cursor / Claude Desktop)
 
-MCP Orchestrator exposes its full management API as MCP tools so Cursor, Claude Desktop, or any MCP client can operate it without the web UI.
+The MCP Orchestrator is a first-class MCP server. When you add it to Cursor or Claude Desktop, the AI gets tools to list workflows, run them, add or remove MCPs, test connections, control the tunnel, and install new MCPs from the registry—all without opening the web UI.
 
-**Resources (read these for context):**
-- `orchestrator://glossary` — Read first: reference for every tool, args, usage, examples
+### Resources (read these for context)
+- `orchestrator://glossary` — Read first: reference for every tool, args, usage, examples (customize via `docs/glossary.md`)
 - `orchestrator://config` — Full config (mcps, workflows)
 - `orchestrator://status` — MCP health + tunnel status
 - `orchestrator://logs` — Recent logs
 
-**Tools exposed:**
+### Tools by category
 
 | Category | Tools |
 |----------|-------|
@@ -281,7 +301,7 @@ MCP Orchestrator exposes its full management API as MCP tools so Cursor, Claude 
 | **Registry** | `search_registry`, `install_from_registry`, `install_npm_mcp` |
 | **Observability** | `get_config`, `get_logs`, `clear_logs` |
 
-Use `call_tool` to test an MCP connection by calling a single tool (e.g. `list_workflows` on the orchestrator itself).
+Use `call_tool` to test an MCP connection (e.g. `call_tool(mcp: "spotify", tool: "getNowPlaying")`).
 
 ### Add to Cursor
 
