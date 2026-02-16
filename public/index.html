@@ -98,7 +98,7 @@
             <button type="button" class="btn btn-danger hidden" id="tunnel-stop-btn">Stop tunnel</button>
           </div>
         </div>
-        <p class="tunnel-hint">Expose MCPs via Cloudflare tunnel with token auth. <strong>Quick tunnel</strong> (no config): random URL each start. <strong>Named tunnel</strong> (stable URL): set <code>CLOUDFLARE_TUNNEL_TOKEN</code> + <code>CLOUDFLARE_TUNNEL_PUBLIC_URL</code> or add to Secrets. Or <strong>Login to Cloudflare</strong> first to use your linked domain (e.g. <code>spotify.devntdevserver.work</code>).</p>
+        <p class="tunnel-hint">Expose MCPs via Cloudflare tunnel with token auth. <strong>Quick tunnel</strong> (no config): random URL each start. <strong>Named tunnel</strong> (stable URL): set <code>CLOUDFLARE_TUNNEL_TOKEN</code> + <code>CLOUDFLARE_TUNNEL_PUBLIC_URL</code> or add to Secrets. Or <strong>Login to Cloudflare</strong> first to use your linked domain (e.g. <code>spotify.example.com</code>).</p>
         <p id="tunnel-named-hint" class="tunnel-named-hint hidden">Stable URL configured. Your tunnel will use the same hostname every time.</p>
         <p id="tunnel-cloudflare-login-row" class="tunnel-cloudflare-login-row">
           <span id="tunnel-cloudflare-status"></span>
@@ -107,10 +107,10 @@
         <div id="tunnel-domain-row" class="tunnel-domain-row hidden">
           <label for="tunnel-domain-input">Domain (from Cloudflare login)</label>
           <div class="tunnel-domain-input-row">
-            <input type="text" id="tunnel-domain-input" placeholder="devntdevserver.work" />
+            <input type="text" id="tunnel-domain-input" placeholder="example.com" />
             <button type="button" class="btn btn-ghost" id="tunnel-domain-save-btn">Save</button>
           </div>
-          <p class="tunnel-domain-hint">The domain you linked during Cloudflare login. Each MCP gets a subdomain: <code>spotify.devntdevserver.work</code>, <code>pieces.devntdevserver.work</code>, etc.</p>
+          <p class="tunnel-domain-hint">The domain you linked during Cloudflare login. Each MCP gets a subdomain: <code>spotify.example.com</code>, <code>pieces.example.com</code>, etc.</p>
         </div>
         <div id="tunnel-secure-status" class="tunnel-secure-status hidden">
           <div class="tunnel-base-url">
