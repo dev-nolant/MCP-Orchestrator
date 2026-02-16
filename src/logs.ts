@@ -72,5 +72,10 @@ export function getLogs(): LogEntry[] {
 
 export function clearLogs(): void {
   entries.length = 0;
-  saveToDisk();
+  try {
+    fs.writeFileSync(LOGS_PATH, '[]', 'utf8');
+  } catch (err) {
+    console.error('Failed to clear logs:', err);
+    throw err;
+  }
 }

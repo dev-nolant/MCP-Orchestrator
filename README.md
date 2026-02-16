@@ -1,5 +1,4 @@
 <a name="top"></a>
-<img width="1427" height="321" alt="image" src="https://github.com/user-attachments/assets/e9555ff6-809d-44f6-8ecb-43438a95a6d4" />
 
 # MCP Orchestrator
 
@@ -15,7 +14,7 @@
 
 Connect MCPs locally (via URL or stdio) and automate actions between them. Chain tools from different MCPs—e.g. filesystem `search_files` → memory `create_entities`, or your own MCP combos.
 
-## Contents
+## Table of Contents
 
 - [Setup](#setup)
 - [Config](#config)
@@ -115,9 +114,6 @@ Example: Spotify → Pieces
 One-command installer that runs the server in the background and adds **mcporch.local** so you can open the UI with a friendly URL. By default, the server is set to **auto-start when you log in**.
 
 ### One-line install (paste into terminal)
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/21527bf4-7f41-4483-8b54-3ea3c78b1733" width="682" height="483" />
-</p>
 
 **Mac & Linux:**
 ```bash
@@ -183,7 +179,7 @@ Then open **http://mcporch.local:3847**
 - `./scripts/update.sh` / `.\scripts\update.ps1` — update (git pull, npm install, build, restart)
 - `./scripts/enable-startup.sh` / `.\scripts\enable-startup.ps1` — enable auto-start on login
 - `./scripts/disable-startup.sh` / `.\scripts\disable-startup.ps1` — disable auto-start on login
-- Logs: `tail -f .mcp-orchestrator.log` (Mac/Linux) or `Get-Content .mcp-orchestrator.log -Wait -Tail 20` (Windows)
+- Logs: `tail -f .mcp-orchestrator.log` (Mac/Linux) or `Get-Content .mcp-orchestrator.log -Wait -Tail 20` (Windows). On Windows, stderr goes to `.mcp-orchestrator.err`.
 
 The installer adds `127.0.0.1 mcporch.local` to your hosts file (requires sudo/admin on first run).
 
@@ -234,9 +230,6 @@ This stops the server and removes the scheduled task.
 If you used a custom install location, run the scripts from that directory instead of `~/mcp-orchestrator`.
 
 ## Web UI
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/be5c416a-f447-46c7-8ed5-34a3e91f9762" width="682" height="483" />
-</p>
 
 ```bash
 npm run ui
@@ -303,9 +296,6 @@ In `claude_desktop_config.json`:
 Ensure the MCP Orchestrator server is running (`npm run ui` or via the install scripts) before using the tools.
 
 ## Public URL (Tunnel)
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/46ed8543-f363-44f9-9577-b16ecf592b4d" width="682" height="483" />
-</p>
 
 Expose **any MCP** to the internet with token auth. Two options:
 

@@ -99,6 +99,16 @@ async function main() {
     app.get('/api/config', (_req, res) => {
         res.json(loadConfig());
     });
+    app.get('/api/server-info', (_req, res) => {
+        const cwd = process.cwd();
+        res.json({
+            port: Number(process.env.PORT ?? 3847),
+            cwd,
+            configPath: path.join(cwd, 'mcp-orchestrator.config.json'),
+            secretsPath: path.join(cwd, 'mcp-orchestrator.secrets.json'),
+            logsPath: path.join(cwd, 'mcp-orchestrator.logs.json'),
+        });
+    });
     app.get('/api/logs', (_req, res) => {
         res.json(getLogs());
     });
@@ -116,6 +126,15 @@ async function main() {
         }
     });
     app.delete('/api/logs', (_req, res) => {
+        try {
+            clearLogs();
+            res.json({ ok: true });
+        }
+        catch {
+            res.status(500).json({ error: 'Failed to clear logs' });
+        }
+    });
+    app.post('/api/logs/clear', (_req, res) => {
         try {
             clearLogs();
             res.json({ ok: true });
@@ -356,7 +375,11 @@ async function main() {
                 try {
                     await client.connect(transport);
                     const { tools } = await client.listTools();
-                    toolsByMcp[name] = tools.map((t) => ({ name: t.name, description: t.description ?? '' }));
+                    toolsByMcp[name] = tools.map((t) => ({
+                        name: t.name,
+                        description: t.description ?? '',
+                        inputSchema: t.inputSchema,
+                    }));
                 }
                 catch (err) {
                     toolsByMcp[name] = [];

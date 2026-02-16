@@ -58,11 +58,33 @@ body {
   flex-wrap: wrap;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.btn-settings,
 .btn-logs {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  flex-shrink: 0;
+}
+
+.settings-icon {
+  width: 1.1rem;
+  height: 1.1rem;
+  opacity: 0.9;
+}
+
+.settings-label {
+  font-size: 0.9rem;
+}
+
+.btn-settings.active {
+  color: var(--accent);
+  border-color: var(--accent-dim);
 }
 
 .logs-icon {
@@ -162,6 +184,7 @@ body {
   display: flex;
   gap: 0.5rem;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .mcp-checking-banner {
@@ -828,12 +851,108 @@ body {
   background: rgba(239, 68, 68, 0.1);
 }
 
+/* MCP view toggle */
+.mcp-view-toggle {
+  display: inline-flex;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.mcp-view-btn {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+
+.mcp-view-btn:hover {
+  color: var(--text);
+}
+
+.mcp-view-btn.active {
+  color: var(--accent);
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.mcp-view-btn + .mcp-view-btn {
+  border-left: 1px solid var(--border);
+}
+
 /* MCP cards */
 .mcps-list,
 .workflows-list {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+}
+
+.mcps-list.mcps-card-view {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+}
+
+.mcps-list.mcps-card-view .empty-state {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 720px) {
+  .mcps-list.mcps-card-view {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .mcps-list.mcps-card-view {
+    grid-template-columns: 1fr;
+  }
+}
+
+.mcp-item-card,
+.mcp-item-expanded {
+  cursor: pointer;
+}
+
+.mcp-item-card {
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.mcp-item-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.mcp-item-card .mcp-item-title {
+  font-size: 0.95rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.mcp-item-card-meta {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.mcp-item-card-actions {
+  margin-top: auto;
+  padding-top: 0.5rem;
+}
+
+.mcp-item-card-actions .btn {
+  padding: 0.3rem 0.5rem;
+  font-size: 0.8rem;
 }
 
 .mcp-item,
@@ -888,9 +1007,9 @@ body {
 
 .step-row {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.75rem;
   align-items: flex-start;
-  margin-bottom: 0.75rem;
+  margin-bottom: 1rem;
   flex-wrap: wrap;
 }
 
@@ -909,11 +1028,11 @@ body {
 
 .args-wrapper {
   flex: 2;
-  min-width: 200px;
+  min-width: 220px;
   max-width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.5rem;
 }
 
 .args-mode-toggle {
@@ -950,15 +1069,31 @@ body {
   opacity: 0.6;
 }
 
+.args-fill-template {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  border-left: 1px solid var(--border);
+}
+.args-fill-template:hover {
+  color: var(--accent);
+}
+.args-fill-template.hidden {
+  display: none;
+}
+
 .args-content {
   position: relative;
-  min-height: 56px;
+  min-height: 80px;
 }
 
 .args-content .args-input,
 .args-content .args-preview {
   width: 100%;
-  min-height: 56px;
+  min-height: 80px;
   resize: vertical;
 }
 
@@ -991,21 +1126,25 @@ body {
 }
 
 .step-row .args-input {
-  padding: 0.5rem;
+  padding: 0.6rem 0.75rem;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--text);
   font-family: var(--font-mono);
-  font-size: 0.8rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
   resize: vertical;
-  min-height: 56px;
+  min-height: 80px;
   overflow-wrap: break-word;
   word-break: break-word;
 }
 
 .step-block {
-  margin-bottom: 0.75rem;
+  padding: 1rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
 }
 
 .step-actions {
@@ -1039,8 +1178,8 @@ body {
 }
 
 .step-result {
-  margin-top: 0.5rem;
-  padding: 0.75rem;
+  margin-top: 0.75rem;
+  padding: 1rem;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -1049,7 +1188,7 @@ body {
   line-height: 1.5;
   word-wrap: break-word;
   overflow-wrap: break-word;
-  max-height: 220px;
+  max-height: 240px;
   overflow-y: auto;
 }
 
@@ -1101,20 +1240,27 @@ body {
   color: #f87171;
 }
 
+#steps-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+
 .add-step-btn {
-  margin-top: 0.5rem;
+  margin-top: 1rem;
 }
 
 /* Form fields */
 .form-row {
-  margin-bottom: 1rem;
+  margin-bottom: 1.25rem;
 }
 
 .form-row label {
   display: block;
   font-size: 0.85rem;
   font-weight: 500;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.5rem;
   color: var(--text-muted);
 }
 
@@ -1144,7 +1290,8 @@ body {
 .form-row-hint {
   font-size: 0.8rem;
   color: var(--text-muted);
-  margin-top: 0.25rem;
+  margin-top: 0.35rem;
+  margin-bottom: 0.5rem;
   overflow-wrap: break-word;
 }
 
@@ -1190,14 +1337,14 @@ body {
 }
 
 .schedule-format-toggle {
-  margin-bottom: 0.75rem;
+  margin-bottom: 1rem;
 }
 
 .schedule-selectors {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
-  margin-bottom: 0.5rem;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
 }
 
 .schedule-selectors.hidden {
@@ -1412,6 +1559,353 @@ body {
 
 /* Modal */
 /* Logs panel */
+/* MCP Wiki Modal */
+.mcp-wiki-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1.5rem;
+  backdrop-filter: blur(4px);
+  animation: wiki-overlay-in 0.2s ease;
+}
+
+.mcp-wiki-modal-overlay.hidden {
+  display: none;
+}
+
+@keyframes wiki-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.mcp-wiki-modal {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 720px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
+  animation: wiki-modal-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes wiki-modal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.mcp-wiki-modal-header {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-shrink: 0;
+}
+
+.mcp-wiki-modal-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.mcp-wiki-modal-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.mcp-wiki-modal-status {
+  display: inline-flex;
+}
+
+.mcp-wiki-modal-status .mcp-status {
+  font-size: 0.8rem;
+}
+
+.mcp-wiki-modal-actions {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.mcp-wiki-close {
+  font-size: 1.35rem;
+  line-height: 1;
+  padding: 0.25rem 0.5rem;
+  min-width: 2.25rem;
+}
+
+.mcp-wiki-tabs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0 1.5rem;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.mcp-wiki-tab {
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.mcp-wiki-tab:hover {
+  color: var(--text);
+}
+
+.mcp-wiki-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.mcp-wiki-panes {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.mcp-wiki-pane {
+  display: none;
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem;
+}
+
+.mcp-wiki-pane.active {
+  display: block;
+}
+
+.wiki-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 1rem;
+}
+
+.wiki-overview-card {
+  padding: 1rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.wiki-overview-card-wide {
+  grid-column: 1 / -1;
+}
+
+.wiki-overview-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.35rem;
+}
+
+.wiki-overview-value {
+  font-size: 0.95rem;
+}
+
+.wiki-overview-value code {
+  font-size: 0.85rem;
+  word-break: break-all;
+}
+
+.wiki-tools-search-wrap {
+  margin-bottom: 1rem;
+}
+
+.mcp-wiki-search {
+  width: 100%;
+  max-width: 280px;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.mcp-wiki-search::placeholder {
+  color: var(--text-muted);
+}
+
+.mcp-wiki-tools-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.mcp-wiki-tool-card {
+  padding: 0.75rem 1rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.mcp-wiki-tool-card:hover {
+  border-color: #363d48;
+}
+
+.mcp-wiki-tool-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+}
+
+.mcp-wiki-tool-name {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.mcp-wiki-tool-expand {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.mcp-wiki-tool-desc {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-top: 0.35rem;
+  line-height: 1.4;
+}
+
+.mcp-wiki-tool-schema-wrap {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.mcp-wiki-tool-schema-wrap.hidden {
+  display: none;
+}
+
+.mcp-wiki-tool-schema-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.mcp-wiki-tool-schema-row pre {
+  flex: 1;
+  margin: 0;
+  padding: 0.75rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.btn-copy-schema {
+  flex-shrink: 0;
+  font-size: 0.8rem;
+}
+
+.wiki-pane-subtitle {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 1rem 0 0.5rem 0;
+}
+
+.wiki-pane-subtitle:first-child {
+  margin-top: 0;
+}
+
+.mcp-wiki-impl-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.mcp-wiki-impl-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.mcp-wiki-impl-card:hover {
+  background: var(--bg-hover);
+  border-color: #363d48;
+}
+
+.mcp-wiki-impl-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.mcp-wiki-impl-name {
+  font-weight: 500;
+}
+
+.mcp-wiki-impl-meta {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.mcp-wiki-impl-badge {
+  font-size: 0.7rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.mcp-wiki-impl-badge-manual {
+  background: rgba(139, 148, 158, 0.2);
+  color: var(--text-muted);
+}
+
+.mcp-wiki-empty {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
 .logs-overlay {
   position: fixed;
   inset: 0;
@@ -1668,8 +2162,8 @@ body {
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 1.5rem;
-  max-width: 560px;
+  padding: 2rem;
+  max-width: 680px;
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
@@ -1685,15 +2179,17 @@ body {
 }
 
 .modal h3 {
-  margin: 0 0 1rem 0;
-  font-size: 1.1rem;
+  margin: 0 0 1.25rem 0;
+  font-size: 1.15rem;
 }
 
 .modal-actions {
   display: flex;
   gap: 0.5rem;
   justify-content: flex-end;
-  margin-top: 1.5rem;
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
 }
 
 .token-modal-warning {
@@ -1759,4 +2255,219 @@ body {
 .tool-item .name {
   color: var(--text);
   font-weight: 500;
+}
+
+/* Page footer */
+.page-footer {
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: center;
+}
+
+.github-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  text-decoration: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.github-btn:hover {
+  color: var(--text);
+  border-color: #363d48;
+  background: var(--bg-hover);
+}
+
+.github-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+/* Settings panel */
+.settings-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.settings-section {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+}
+
+.settings-section-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 0.75rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tooltip-wrap {
+  cursor: help;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 400;
+}
+
+.tooltip-wrap:hover {
+  color: var(--accent);
+}
+
+.settings-desc {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin: 0 0 1rem 0;
+  line-height: 1.5;
+}
+
+.settings-server-info {
+  font-size: 0.9rem;
+}
+
+.settings-dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.5rem 1.5rem;
+  align-items: baseline;
+}
+
+.settings-dl dt {
+  margin: 0;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.settings-dl dd {
+  margin: 0;
+  overflow-wrap: break-word;
+  word-break: break-all;
+}
+
+.settings-dl code {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  padding: 0.1em 0.35em;
+  background: var(--bg);
+  border-radius: 4px;
+}
+
+.settings-secrets-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.settings-secret-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.settings-secret-key-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-secret-key-name code {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+
+.settings-secret-mask {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.settings-add-secret {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.settings-secret-key,
+.settings-secret-value {
+  flex: 1;
+  min-width: 120px;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+}
+
+.settings-form-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.settings-field label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 500;
+  margin-bottom: 0.35rem;
+  color: var(--text-muted);
+}
+
+.settings-input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.settings-field-hint {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+}
+
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.settings-status {
+  font-size: 0.9rem;
+  color: var(--success);
+}
+
+.settings-status.error {
+  color: var(--error);
+}
+
+.settings-empty,
+.settings-error {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.settings-error {
+  color: var(--error);
 }

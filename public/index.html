@@ -17,11 +17,20 @@
           <h1 class="logo">MCP Orchestrator</h1>
           <p class="tagline">Connect MCPs · Build automations · Chain tools</p>
         </div>
-        <button type="button" class="btn btn-ghost btn-logs" id="logs-btn" title="View activity logs">
-          <span class="logs-icon">≡</span>
-          <span class="logs-label">Logs</span>
-          <span class="logs-badge hidden" id="logs-badge">0</span>
-        </button>
+        <div class="header-actions">
+          <button type="button" class="btn btn-ghost btn-settings" id="settings-btn" title="Settings">
+            <svg class="settings-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            <span class="settings-label">Settings</span>
+          </button>
+          <button type="button" class="btn btn-ghost btn-logs" id="logs-btn" title="View activity logs">
+            <span class="logs-icon">≡</span>
+            <span class="logs-label">Logs</span>
+            <span class="logs-badge hidden" id="logs-badge">0</span>
+          </button>
+        </div>
       </div>
       <nav class="tabs">
         <button class="tab active" data-tab="mcps">MCPs</button>
@@ -37,6 +46,10 @@
         <div class="panel-header">
           <h2>MCP Servers</h2>
           <div class="panel-header-actions">
+            <div class="mcp-view-toggle" role="group" aria-label="View mode">
+              <button type="button" class="mcp-view-btn active" data-view="card" title="Compact cards, 3 per row">Card</button>
+              <button type="button" class="mcp-view-btn" data-view="expanded" title="Full details with tools list">Expanded</button>
+            </div>
             <button type="button" class="btn btn-ghost" id="check-mcp-status-btn" title="Check if MCPs are online">Check status</button>
             <button type="button" class="btn btn-primary" id="add-mcp-btn">Add MCP</button>
           </div>
@@ -126,7 +139,71 @@
         <p class="tunnel-subhint">Generate a token for each MCP to share with remote clients. Each token is scoped to that MCP only.</p>
         <div id="tunnel-mcps-list" class="tunnel-mcps-list"></div>
       </section>
+
+      <section id="panel-settings" class="panel">
+        <div class="panel-header">
+          <h2>Settings</h2>
+        </div>
+        <div class="settings-sections">
+          <section class="settings-section">
+            <h3 class="settings-section-title">
+              Server Info
+              <span class="tooltip-wrap" title="Read-only information about where MCP Orchestrator stores data and which port it uses.">ⓘ</span>
+            </h3>
+            <div id="settings-server-info" class="settings-server-info"></div>
+          </section>
+          <section class="settings-section">
+            <h3 class="settings-section-title">
+              Secrets
+              <span class="tooltip-wrap" title="Store tokens and API keys here. Values are saved in mcp-orchestrator.secrets.json (gitignored). Use in MCP config as secret:key (e.g. secret:OPENAI_API_KEY).">ⓘ</span>
+            </h3>
+            <p class="settings-desc">Secrets are used for Bearer tokens, Cloudflare tunnel config, and MCP authorization. Never commit the secrets file.</p>
+            <div id="settings-secrets-list" class="settings-secrets-list"></div>
+            <div class="settings-add-secret">
+              <input type="text" id="settings-secret-key" placeholder="Key (e.g. OPENAI_API_KEY)" class="settings-secret-key" title="Secret key name. Use env:VAR for env vars, or secret:key to reference in MCP config." />
+              <input type="password" id="settings-secret-value" placeholder="Value" class="settings-secret-value" title="The secret value. Stored securely in mcp-orchestrator.secrets.json." />
+              <button type="button" class="btn btn-primary" id="settings-secret-add">Add</button>
+            </div>
+          </section>
+          <section class="settings-section">
+            <h3 class="settings-section-title">
+              Cloudflare Tunnel
+              <span class="tooltip-wrap" title="For a stable Public URL, add your Cloudflare tunnel token and public URL here. Or use env vars: CLOUDFLARE_TUNNEL_TOKEN, CLOUDFLARE_TUNNEL_PUBLIC_URL.">ⓘ</span>
+            </h3>
+            <p class="settings-desc">Configure a named tunnel for a stable Public URL. Get these from Cloudflare Zero Trust or dashboard after creating a tunnel.</p>
+            <div class="settings-form-grid">
+              <div class="settings-field">
+                <label for="settings-tunnel-token">Tunnel token</label>
+                <input type="password" id="settings-tunnel-token" placeholder="Paste from Cloudflare dashboard" class="settings-input" title="Cloudflare tunnel token. Stored as secret cloudflare_tunnel_token." />
+                <span class="settings-field-hint">From Cloudflare: Create tunnel → Use existing token</span>
+              </div>
+              <div class="settings-field">
+                <label for="settings-tunnel-url">Public URL</label>
+                <input type="text" id="settings-tunnel-url" placeholder="https://mcp.example.com" class="settings-input" title="The public hostname for your tunnel (e.g. https://mcp.example.com)." />
+                <span class="settings-field-hint">Hostname you configured in Cloudflare</span>
+              </div>
+              <div class="settings-field">
+                <label for="settings-tunnel-domain">Base domain (optional)</label>
+                <input type="text" id="settings-tunnel-domain" placeholder="mcp.example.com" class="settings-input" title="Domain for subdomain-per-MCP (e.g. spotify.mcp.example.com). Used when logged in to Cloudflare." />
+                <span class="settings-field-hint">For subdomain routing: each MCP gets its own subdomain</span>
+              </div>
+            </div>
+            <div class="settings-actions">
+              <button type="button" class="btn btn-primary" id="settings-tunnel-save">Save tunnel config</button>
+              <span id="settings-tunnel-status" class="settings-status"></span>
+            </div>
+          </section>
+        </div>
+      </section>
     </main>
+    <footer class="page-footer">
+      <a href="https://github.com/dev-nolant/MCP-Orchestrator" target="_blank" rel="noopener noreferrer" class="github-btn" title="View on GitHub">
+        <svg class="github-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+        </svg>
+        <span>View on GitHub</span>
+      </a>
+    </footer>
   </div>
 
   <div id="logs-overlay" class="logs-overlay hidden"></div>
@@ -143,7 +220,7 @@
           <option value="config">Config</option>
           <option value="tunnel">Tunnel</option>
         </select>
-        <button type="button" class="btn btn-ghost btn-logs-download" title="Download logs">↓ Download</button>
+        <button type="button" class="btn btn-ghost btn-logs-download" title="Download logs as JSON (send to developer for support)">↓ Download</button>
         <button type="button" class="btn btn-ghost btn-logs-clear" title="Clear logs">Clear</button>
         <button type="button" class="btn btn-ghost btn-logs-close" id="logs-close-btn" title="Close">×</button>
       </div>
@@ -154,6 +231,32 @@
 
   <div id="modal-overlay" class="modal-overlay hidden">
     <div id="modal" class="modal"></div>
+  </div>
+
+  <div id="mcp-wiki-modal-overlay" class="mcp-wiki-modal-overlay hidden">
+    <div id="mcp-wiki-modal" class="mcp-wiki-modal">
+      <header class="mcp-wiki-modal-header">
+        <div class="mcp-wiki-modal-title-row">
+          <h2 id="mcp-wiki-modal-title" class="mcp-wiki-modal-title">MCP</h2>
+          <span id="mcp-wiki-modal-status" class="mcp-wiki-modal-status"></span>
+        </div>
+        <div class="mcp-wiki-modal-actions">
+          <button type="button" class="btn btn-ghost btn-wiki-edit" title="Edit MCP config">Edit</button>
+          <button type="button" class="btn btn-ghost btn-wiki-spin" title="Spin up/down">—</button>
+          <button type="button" class="btn btn-ghost mcp-wiki-close" title="Close">×</button>
+        </div>
+      </header>
+      <nav class="mcp-wiki-tabs" role="tablist">
+        <button type="button" class="mcp-wiki-tab active" data-tab="overview" role="tab">Overview</button>
+        <button type="button" class="mcp-wiki-tab" data-tab="tools" role="tab">Tools</button>
+        <button type="button" class="mcp-wiki-tab" data-tab="implementations" role="tab">Implementations</button>
+      </nav>
+      <div class="mcp-wiki-panes">
+        <div id="wiki-pane-overview" class="mcp-wiki-pane active" data-pane="overview" role="tabpanel"></div>
+        <div id="wiki-pane-tools" class="mcp-wiki-pane" data-pane="tools" role="tabpanel"></div>
+        <div id="wiki-pane-implementations" class="mcp-wiki-pane" data-pane="implementations" role="tabpanel"></div>
+      </div>
+    </div>
   </div>
 
   <script src="app.js"></script>

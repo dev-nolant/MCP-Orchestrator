@@ -16,11 +16,16 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $OrchDir = Split-Path -Parent $ScriptDir
 $PidFile = Join-Path $OrchDir ".mcp-orchestrator.pid"
 $LogFile = Join-Path $OrchDir ".mcp-orchestrator.log"
+$ErrFile = Join-Path $OrchDir ".mcp-orchestrator.err"
 $HostsPath = "C:\Windows\System32\drivers\etc\hosts"
 $HostsLine = "127.0.0.1 $Hostname"
 
 Write-Host "MCP Orchestrator installer" -ForegroundColor Cyan
 Write-Host "=========================="
+Write-Host ""
+Write-Host "  Created and maintained by Nolan Taft — " -NoNewline -ForegroundColor Gray
+Write-Host "https://github.com/dev-nolant/MCP-Orchestrator" -ForegroundColor DarkGray
+Write-Host ""
 
 # Check Node.js
 try {
@@ -125,7 +130,7 @@ if (Test-Path $PidFile) {
 
 # Start server in background
 Write-Host "`nStarting MCP Orchestrator in background..."
-$proc = Start-Process -FilePath "node" -ArgumentList "build/server.js" -WorkingDirectory $OrchDir -WindowStyle Hidden -PassThru -RedirectStandardOutput $LogFile -RedirectStandardError $LogFile
+$proc = Start-Process -FilePath "node" -ArgumentList "build/server.js" -WorkingDirectory $OrchDir -WindowStyle Hidden -PassThru -RedirectStandardOutput $LogFile -RedirectStandardError $ErrFile
 $proc.Id | Out-File -FilePath $PidFile -Encoding ascii
 
 Start-Sleep -Seconds 1
@@ -153,8 +158,9 @@ if (Get-Process -Id $proc.Id -ErrorAction SilentlyContinue) {
 
     Write-Host "`nTo stop: .\scripts\stop.ps1"
     Write-Host "Logs:   Get-Content $LogFile -Wait -Tail 20"
+    Write-Host "Errors: Get-Content $ErrFile -Wait -Tail 20"
 } else {
-    Write-Host "  [!] Server may have failed to start. Check: $LogFile" -ForegroundColor Yellow
+    Write-Host "  [!] Server may have failed to start. Check: $LogFile and $ErrFile" -ForegroundColor Yellow
     Remove-Item $PidFile -Force -ErrorAction SilentlyContinue
     exit 1
 }
