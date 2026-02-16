@@ -383,32 +383,55 @@ async function startLoggedInTunnel(
     fs.mkdirSync(CLOUDFLARED_DIR, { recursive: true });
   }
 
+  const getHostnameTunnelName = () =>
+    `mcp-orchestrator-${os.hostname().toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'device'}`;
+
+  // Resolve tunnel name and paths - prefer existing credentials (default or hostname-based)
+  let tunnelName = TUNNEL_NAME;
+  let credentialsPath = CREDENTIALS_PATH;
+  let configPath = CONFIG_PATH;
+  if (!fs.existsSync(credentialsPath)) {
+    const hostnameName = getHostnameTunnelName();
+    const hostnameCredPath = path.join(CLOUDFLARED_DIR, `${hostnameName}-credentials.json`);
+    if (fs.existsSync(hostnameCredPath)) {
+      tunnelName = hostnameName;
+      credentialsPath = hostnameCredPath;
+      configPath = path.join(CLOUDFLARED_DIR, `${hostnameName}-config.yml`);
+    }
+  }
+
   // Create tunnel if credentials don't exist
-  if (!fs.existsSync(CREDENTIALS_PATH)) {
-    const credentialsPathArg = CREDENTIALS_PATH.replace(/\\/g, '/');
-    const create = await runCloudflared([
-      'tunnel',
-      'create',
-      '--credentials-file',
-      credentialsPathArg,
-      TUNNEL_NAME,
-    ]);
-    if (create.ok) {
-      appendLog({ type: 'tunnel', message: 'Created Cloudflare tunnel', detail: TUNNEL_NAME, success: true });
-    } else {
+  if (!fs.existsSync(credentialsPath)) {
+    const tryCreateWith = async (name: string, credPath: string) => {
+      const credPathArg = credPath.replace(/\\/g, '/');
+      const create = await runCloudflared([
+        'tunnel',
+        'create',
+        '--credentials-file',
+        credPathArg,
+        name,
+      ]);
+      return create;
+    };
+
+    let create = await tryCreateWith(tunnelName, credentialsPath);
+    if (!create.ok) {
       const stderr = (create.stderr || create.stdout).toLowerCase();
       if (stderr.includes('already exists') || stderr.includes('already registered')) {
-        // Tunnel exists (e.g. created on another machine) but we have no credentials
-        throw new Error(
-          `Tunnel "${TUNNEL_NAME}" already exists in your Cloudflare account (maybe from another device). ` +
-            `Copy the credentials file from that machine to:\n${CREDENTIALS_PATH}\n\n` +
-            `Or create a different tunnel: set MCP_ORCHESTRATOR_TUNNEL_NAME to a unique name (e.g. mcp-orchestrator-my-pc).`,
-        );
+        // Default tunnel exists elsewhere (e.g. laptop) - create one unique to this machine
+        tunnelName = getHostnameTunnelName();
+        credentialsPath = path.join(CLOUDFLARED_DIR, `${tunnelName}-credentials.json`);
+        configPath = path.join(CLOUDFLARED_DIR, `${tunnelName}-config.yml`);
+        appendLog({ type: 'tunnel', message: `Creating device-specific tunnel: ${tunnelName}`, detail: null });
+        create = await tryCreateWith(tunnelName, credentialsPath);
       }
+    }
+    if (!create.ok) {
       throw new Error(`Failed to create tunnel: ${create.stderr || create.stdout}`);
     }
-    if (!fs.existsSync(CREDENTIALS_PATH)) {
-      throw new Error(`Tunnel created but credentials file not found at ${CREDENTIALS_PATH}`);
+    appendLog({ type: 'tunnel', message: 'Created Cloudflare tunnel', detail: tunnelName, success: true });
+    if (!fs.existsSync(credentialsPath)) {
+      throw new Error(`Tunnel created but credentials file not found at ${credentialsPath}`);
     }
   }
 
@@ -416,7 +439,7 @@ async function startLoggedInTunnel(
   for (const { name, config } of mcps) {
     const subdomain = toTunnelSubdomain(name, config);
     const hostname = `${subdomain}.${domain}`;
-    const route = await runCloudflared(['tunnel', 'route', 'dns', TUNNEL_NAME, hostname]);
+    const route = await runCloudflared(['tunnel', 'route', 'dns', tunnelName, hostname]);
     if (!route.ok && !route.stderr.includes('already exists') && !route.stderr.includes('record already')) {
       appendLog({
         type: 'tunnel',
@@ -435,9 +458,9 @@ async function startLoggedInTunnel(
   });
   ingressRules.push({ service: 'http_status:404' });
 
-  const credentialsPathForConfig = CREDENTIALS_PATH.replace(/\\/g, '/');
+  const credentialsPathForConfig = credentialsPath.replace(/\\/g, '/');
   const configYaml = [
-    `tunnel: ${TUNNEL_NAME}`,
+    `tunnel: ${tunnelName}`,
     `credentials-file: ${credentialsPathForConfig}`,
     'ingress:',
     ...ingressRules.flatMap((r) =>
@@ -447,13 +470,13 @@ async function startLoggedInTunnel(
     ),
   ].join('\n');
 
-  fs.writeFileSync(CONFIG_PATH, configYaml, 'utf8');
+  fs.writeFileSync(configPath, configYaml, 'utf8');
 
   const firstSubdomain = toTunnelSubdomain(mcps[0].name, mcps[0].config);
   const baseUrl = `https://${firstSubdomain}.${domain}`;
 
   return new Promise((resolve, reject) => {
-    const proc = spawn('cloudflared', ['tunnel', '--no-autoupdate', '--config', CONFIG_PATH, 'run', TUNNEL_NAME], spawnOpts());
+    const proc = spawn('cloudflared', ['tunnel', '--no-autoupdate', '--config', configPath, 'run', tunnelName], spawnOpts());
 
     let stdout = '';
     let stderr = '';
