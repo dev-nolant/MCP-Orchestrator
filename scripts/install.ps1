@@ -23,7 +23,7 @@ $HostsLine = "127.0.0.1 $Hostname"
 Write-Host "MCP Orchestrator installer" -ForegroundColor Cyan
 Write-Host "=========================="
 Write-Host ""
-Write-Host "  Created and maintained by Nolan Taft — " -NoNewline -ForegroundColor Gray
+Write-Host "  Created and maintained by Nolan Taft - " -NoNewline -ForegroundColor Gray
 Write-Host "https://github.com/dev-nolant/MCP-Orchestrator" -ForegroundColor DarkGray
 Write-Host ""
 
