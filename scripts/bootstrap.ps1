@@ -13,15 +13,26 @@ Write-Host "MCP Orchestrator — bootstrap" -ForegroundColor Cyan
 Write-Host "  Created and maintained by Nolan Taft — https://github.com/dev-nolant/MCP-Orchestrator" -ForegroundColor DarkGray
 Write-Host "Cloning to $Dest ..."
 
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    throw "Git is not installed or not available in PATH."
+}
+
 if (Test-Path $Dest) {
     Write-Host "Directory exists. Updating..."
     Push-Location $Dest
-    try {
-        git fetch --depth 1 origin
-        git reset --hard origin/main
-    } catch {
-        Write-Host "Git update completed (any warnings above can be ignored)" -ForegroundColor Yellow
+
+    git fetch --depth 1 origin | Out-Null
+
+    $defaultBranch = git remote show origin | Select-String "HEAD branch" | ForEach-Object {
+        $_.ToString().Split(":")[1].Trim()
     }
+
+    if (-not $defaultBranch) {
+        $defaultBranch = git rev-parse --abbrev-ref HEAD
+    }
+
+    git reset --hard "origin/$defaultBranch" | Out-Null
+
     Pop-Location
 } else {
     git clone --depth 1 $GithubRepo $Dest
