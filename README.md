@@ -323,5 +323,4 @@ Authorization: Bearer <your-token>
 
 ## Prerequisites
 
-- **Spotify MCP**: Auth with `npm run auth` in `spotify-mcp-server`
-- **Pieces MCP**: Pieces Desktop running (exposes MCP at the configured URL)
+- **Node.js** (v18+)
