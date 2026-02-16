@@ -128,9 +128,11 @@ if (Test-Path $PidFile) {
     Remove-Item $PidFile -Force -ErrorAction SilentlyContinue
 }
 
-# Start server in background
+# Start server in background (cmd /c avoids PowerShell bug: RedirectStandardOutput/RedirectStandardError "are same")
 Write-Host "`nStarting MCP Orchestrator in background..."
-$proc = Start-Process -FilePath "node" -ArgumentList "build/server.js" -WorkingDirectory $OrchDir -WindowStyle Hidden -PassThru -RedirectStandardOutput $LogFile -RedirectStandardError $ErrFile
+$runCmd = "node build\server.js 1> `"$LogFile`" 2> `"$ErrFile`""
+$proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c", $runCmd -WorkingDirectory $OrchDir -WindowStyle Hidden -PassThru
+# PID is cmd.exe; node runs as child (stopping cmd stops node)
 $proc.Id | Out-File -FilePath $PidFile -Encoding ascii
 
 Start-Sleep -Seconds 1

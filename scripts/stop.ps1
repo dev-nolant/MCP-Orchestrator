@@ -11,7 +11,8 @@ $Stopped = $false
 if (Test-Path $PidFile) {
     $Pid = Get-Content $PidFile -ErrorAction SilentlyContinue
     if ($Pid -and (Get-Process -Id $Pid -ErrorAction SilentlyContinue)) {
-        Stop-Process -Id $Pid -Force -ErrorAction SilentlyContinue
+        # /T kills process tree (cmd + child node)
+        cmd /c "taskkill /PID $Pid /T /F 2>nul"
         Write-Host "Stopped MCP Orchestrator (PID $Pid)"
         $Stopped = $true
     }
