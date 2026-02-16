@@ -451,14 +451,29 @@ async function startLoggedInTunnel(
       }
     }, 30000);
 
-    proc.on('exit', () => {
-      cloudflareTunnelProcess = null;
-      cloudflareTunnelUrl = null;
+    proc.on('error', (err) => {
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timeout);
+        cloudflareTunnelProcess = null;
+        cloudflareTunnelUrl = null;
+        reject(new Error(`cloudflared failed: ${err.message}. Is cloudflared in PATH? Windows: winget install Cloudflare.cloudflared`));
+      }
     });
 
-    // Resolve after short delay - tunnel connects quickly when config is correct
+    proc.on('exit', (code) => {
+      cloudflareTunnelProcess = null;
+      cloudflareTunnelUrl = null;
+      if (!resolved && code !== 0 && code !== null) {
+        resolved = true;
+        clearTimeout(timeout);
+        reject(new Error(`cloudflared exited with code ${code}. Check logs or run cloudflared manually.`));
+      }
+    });
+
+    // Resolve after short delay only if process is still running
     setTimeout(() => {
-      if (!resolved) {
+      if (!resolved && (proc.exitCode === null || proc.exitCode === undefined)) {
         resolved = true;
         clearTimeout(timeout);
         cloudflareTunnelProcess = proc;
@@ -510,7 +525,15 @@ export function getOrchestratorTunnelUrl(): string | null {
 }
 
 export function isCloudflareTunnelActive(): boolean {
-  return cloudflareTunnelProcess !== null;
+  if (!cloudflareTunnelProcess) return false;
+  // Process may have exited without clearing our ref (e.g. server restarted, crash)
+  const exitCode = cloudflareTunnelProcess.exitCode;
+  if (exitCode !== null && exitCode !== undefined) {
+    cloudflareTunnelProcess = null;
+    cloudflareTunnelUrl = null;
+    return false;
+  }
+  return true;
 }
 
 export function isNamedTunnelConfigured(): boolean {
