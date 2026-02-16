@@ -385,11 +385,12 @@ async function startLoggedInTunnel(
 
   // Create tunnel if credentials don't exist
   if (!fs.existsSync(CREDENTIALS_PATH)) {
+    const credentialsPathArg = CREDENTIALS_PATH.replace(/\\/g, '/');
     const create = await runCloudflared([
       'tunnel',
       'create',
       '--credentials-file',
-      CREDENTIALS_PATH,
+      credentialsPathArg,
       TUNNEL_NAME,
     ]);
     if (!create.ok && !create.stderr.includes('already exists')) {
@@ -397,6 +398,13 @@ async function startLoggedInTunnel(
     }
     if (create.ok) {
       appendLog({ type: 'tunnel', message: 'Created Cloudflare tunnel', detail: TUNNEL_NAME, success: true });
+    }
+    // If tunnel "already exists" in Cloudflare, create won't write credentials - we'd fail on run
+    if (!fs.existsSync(CREDENTIALS_PATH)) {
+      throw new Error(
+        `Tunnel "${TUNNEL_NAME}" already exists in Cloudflare but credentials file is missing. ` +
+          'Delete the tunnel in Cloudflare Zero Trust dashboard (Access > Tunnels) and try again, or run: cloudflared tunnel delete mcp-orchestrator',
+      );
     }
   }
 
