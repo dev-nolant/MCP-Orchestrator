@@ -263,11 +263,25 @@ To sync Spotify → Pieces automatically every 30 minutes:
 
 ## Use as an MCP (Cursor / Claude Desktop)
 
-MCP Orchestrator exposes its workflows as MCP tools so Cursor, Claude Desktop, or any MCP client can run them.
+MCP Orchestrator exposes its full management API as MCP tools so Cursor, Claude Desktop, or any MCP client can operate it without the web UI.
+
+**Resources (read these for context):**
+- `orchestrator://glossary` — Read first: reference for every tool, args, usage, examples
+- `orchestrator://config` — Full config (mcps, workflows)
+- `orchestrator://status` — MCP health + tunnel status
+- `orchestrator://logs` — Recent logs
 
 **Tools exposed:**
-- `list_workflows` — List all configured workflows
-- `run_workflow` — Run a workflow by name
+
+| Category | Tools |
+|----------|-------|
+| **Workflows** | `list_workflows`, `run_workflow`, `get_workflow`, `add_workflow`, `update_workflow`, `delete_workflow`, `schedule_workflow`, `unschedule_workflow` |
+| **MCPs** | `list_mcps`, `get_mcp_status`, `add_mcp`, `remove_mcp`, `enable_mcp`, `disable_mcp`, `call_tool`, `list_tools` |
+| **Tunnel** | `get_tunnel_status`, `start_tunnel`, `stop_tunnel`, `set_tunnel_domain`, `cloudflare_login`, `generate_tunnel_token`, `revoke_tunnel_token` |
+| **Registry** | `search_registry`, `install_from_registry`, `install_npm_mcp` |
+| **Observability** | `get_config`, `get_logs`, `clear_logs` |
+
+Use `call_tool` to test an MCP connection by calling a single tool (e.g. `list_workflows` on the orchestrator itself).
 
 ### Add to Cursor
 

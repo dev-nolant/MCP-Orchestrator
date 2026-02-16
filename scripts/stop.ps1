@@ -9,16 +9,17 @@ $Stopped = $false
 
 # Try PID file first
 if (Test-Path $PidFile) {
-    $ServerPid = Get-Content $PidFile -ErrorAction SilentlyContinue
-    if ($ServerPid -and (Get-Process -Id $ServerPid -ErrorAction SilentlyContinue)) {
+    $Pid = Get-Content $PidFile -ErrorAction SilentlyContinue
+    if ($Pid -and (Get-Process -Id $Pid -ErrorAction SilentlyContinue)) {
         # /T kills process tree (cmd + child node)
-        cmd /c "taskkill /PID $ServerPid /T /F 2>nul"
-        Write-Host "Stopped MCP Orchestrator (PID $ServerPid)"
+        cmd /c "taskkill /PID $Pid /T /F 2>nul"
+        Write-Host "Stopped MCP Orchestrator (PID $Pid)"
         $Stopped = $true
     }
     Remove-Item $PidFile -Force -ErrorAction SilentlyContinue
 }
 
+# Fallback: find node process running build/server.js (started by scheduled task)
 if (-not $Stopped) {
     $procs = Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue
     foreach ($p in $procs) {

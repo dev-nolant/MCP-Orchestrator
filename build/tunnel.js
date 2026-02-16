@@ -79,9 +79,7 @@ export function isCloudflareLoggedIn() {
  */
 export function runCloudflareLogin() {
     return new Promise((resolve) => {
-        const proc = spawn('cloudflared', ['tunnel', 'login'], {
-            stdio: ['ignore', 'pipe', 'pipe'],
-        });
+        const proc = spawn('cloudflared', ['tunnel', 'login'], spawnOpts());
         const timeout = setTimeout(() => {
             proc.kill('SIGTERM');
             resolve({
@@ -126,9 +124,7 @@ export function runCloudflareLogin() {
  */
 async function startQuickTunnel(port) {
     return new Promise((resolve, reject) => {
-        const proc = spawn('cloudflared', ['tunnel', '--url', `http://127.0.0.1:${port}`], {
-            stdio: ['ignore', 'pipe', 'pipe'],
-        });
+        const proc = spawn('cloudflared', ['tunnel', '--url', `http://127.0.0.1:${port}`], spawnOpts());
         let resolved = false;
         const timeout = setTimeout(() => {
             if (!resolved) {
@@ -197,9 +193,7 @@ async function startNamedTunnel(port) {
     const baseUrl = publicUrl.startsWith('http') ? publicUrl : `https://${publicUrl}`;
     // Ingress is configured in Cloudflare dashboard — ensure it points to http://localhost:PORT
     return new Promise((resolve, reject) => {
-        const proc = spawn('cloudflared', ['tunnel', '--no-autoupdate', 'run', '--token', token], {
-            stdio: ['ignore', 'pipe', 'pipe'],
-        });
+        const proc = spawn('cloudflared', ['tunnel', '--no-autoupdate', 'run', '--token', token], spawnOpts());
         let resolved = false;
         const timeout = setTimeout(() => {
             if (!resolved) {
@@ -274,24 +268,45 @@ async function startNamedTunnel(port) {
         }, 5000);
     });
 }
-const TUNNEL_NAME = 'mcp-orchestrator';
-const CREDENTIALS_PATH = path.join(CLOUDFLARED_DIR, 'mcp-orchestrator-credentials.json');
-const CONFIG_PATH = path.join(CLOUDFLARED_DIR, 'mcp-orchestrator-config.yml');
+const TUNNEL_NAME = (process.env.MCP_ORCHESTRATOR_TUNNEL_NAME?.trim() || 'mcp-orchestrator').replace(/[/\\:*?"<>|]/g, '-');
+const CREDENTIALS_PATH = path.join(CLOUDFLARED_DIR, `${TUNNEL_NAME}-credentials.json`);
+const CONFIG_PATH = path.join(CLOUDFLARED_DIR, `${TUNNEL_NAME}-config.yml`);
+const CLOUDFLARED_TIMEOUT_MS = 90_000; // tunnel create/route can be slow, esp on Windows
+const spawnOpts = () => ({
+    stdio: ['ignore', 'pipe', 'pipe'],
+    ...(process.platform === 'win32' && { windowsHide: true }),
+});
 /**
- * Run a cloudflared command and return stdout+stderr.
+ * Run a cloudflared command and return stdout+stderr. Times out to avoid hangs on Windows.
  */
 function runCloudflared(args) {
     return new Promise((resolve) => {
-        const proc = spawn('cloudflared', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+        const proc = spawn('cloudflared', args, spawnOpts());
         let stdout = '';
         let stderr = '';
+        let resolved = false;
+        const finish = (ok, out, err, fromTimeout = false) => {
+            if (resolved)
+                return;
+            resolved = true;
+            if (fromTimeout)
+                proc.kill('SIGTERM');
+            resolve({ ok, stdout: out, stderr: err });
+        };
         proc.stdout?.on('data', (d) => { stdout += d.toString(); });
         proc.stderr?.on('data', (d) => { stderr += d.toString(); });
+        const timer = setTimeout(() => {
+            finish(false, stdout, stderr || 'cloudflared timed out (90s). On Windows, ensure cloudflared is in PATH and not blocked by firewall.', true);
+        }, CLOUDFLARED_TIMEOUT_MS);
         proc.on('exit', (code) => {
-            resolve({ ok: code === 0, stdout, stderr });
+            clearTimeout(timer);
+            if (!resolved)
+                finish(code === 0, stdout, stderr, false);
         });
         proc.on('error', (err) => {
-            resolve({ ok: false, stdout, stderr: err.message });
+            clearTimeout(timer);
+            if (!resolved)
+                finish(false, stdout, err.message, false);
         });
     });
 }
@@ -304,27 +319,58 @@ async function startLoggedInTunnel(port, baseDomain, mcps) {
     if (!fs.existsSync(CLOUDFLARED_DIR)) {
         fs.mkdirSync(CLOUDFLARED_DIR, { recursive: true });
     }
+    const getHostnameTunnelName = () => `mcp-orchestrator-${os.hostname().toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'device'}`;
+    // Resolve tunnel name and paths - prefer existing credentials (default or hostname-based)
+    let tunnelName = TUNNEL_NAME;
+    let credentialsPath = CREDENTIALS_PATH;
+    let configPath = CONFIG_PATH;
+    if (!fs.existsSync(credentialsPath)) {
+        const hostnameName = getHostnameTunnelName();
+        const hostnameCredPath = path.join(CLOUDFLARED_DIR, `${hostnameName}-credentials.json`);
+        if (fs.existsSync(hostnameCredPath)) {
+            tunnelName = hostnameName;
+            credentialsPath = hostnameCredPath;
+            configPath = path.join(CLOUDFLARED_DIR, `${hostnameName}-config.yml`);
+        }
+    }
     // Create tunnel if credentials don't exist
-    if (!fs.existsSync(CREDENTIALS_PATH)) {
-        const create = await runCloudflared([
-            'tunnel',
-            'create',
-            '--credentials-file',
-            CREDENTIALS_PATH,
-            TUNNEL_NAME,
-        ]);
-        if (!create.ok && !create.stderr.includes('already exists')) {
+    if (!fs.existsSync(credentialsPath)) {
+        const tryCreateWith = async (name, credPath) => {
+            const credPathArg = credPath.replace(/\\/g, '/');
+            const create = await runCloudflared([
+                'tunnel',
+                'create',
+                '--credentials-file',
+                credPathArg,
+                name,
+            ]);
+            return create;
+        };
+        let create = await tryCreateWith(tunnelName, credentialsPath);
+        if (!create.ok) {
+            const stderr = (create.stderr || create.stdout).toLowerCase();
+            if (stderr.includes('already exists') || stderr.includes('already registered')) {
+                // Default tunnel exists elsewhere (e.g. laptop) - create one unique to this machine
+                tunnelName = getHostnameTunnelName();
+                credentialsPath = path.join(CLOUDFLARED_DIR, `${tunnelName}-credentials.json`);
+                configPath = path.join(CLOUDFLARED_DIR, `${tunnelName}-config.yml`);
+                appendLog({ type: 'tunnel', message: `Creating device-specific tunnel: ${tunnelName}`, detail: null });
+                create = await tryCreateWith(tunnelName, credentialsPath);
+            }
+        }
+        if (!create.ok) {
             throw new Error(`Failed to create tunnel: ${create.stderr || create.stdout}`);
         }
-        if (create.ok) {
-            appendLog({ type: 'tunnel', message: 'Created Cloudflare tunnel', detail: TUNNEL_NAME, success: true });
+        appendLog({ type: 'tunnel', message: 'Created Cloudflare tunnel', detail: tunnelName, success: true });
+        if (!fs.existsSync(credentialsPath)) {
+            throw new Error(`Tunnel created but credentials file not found at ${credentialsPath}`);
         }
     }
     // Route DNS for each MCP: {subdomain}.{domain}
     for (const { name, config } of mcps) {
         const subdomain = toTunnelSubdomain(name, config);
         const hostname = `${subdomain}.${domain}`;
-        const route = await runCloudflared(['tunnel', 'route', 'dns', TUNNEL_NAME, hostname]);
+        const route = await runCloudflared(['tunnel', 'route', 'dns', tunnelName, hostname]);
         if (!route.ok && !route.stderr.includes('already exists') && !route.stderr.includes('record already')) {
             appendLog({
                 type: 'tunnel',
@@ -340,21 +386,24 @@ async function startLoggedInTunnel(port, baseDomain, mcps) {
         return [{ hostname: `${subdomain}.${domain}`, service: `http://127.0.0.1:${port}` }];
     });
     ingressRules.push({ service: 'http_status:404' });
+    const credentialsPathForConfig = credentialsPath.replace(/\\/g, '/');
     const configYaml = [
-        `tunnel: ${TUNNEL_NAME}`,
-        `credentials-file: ${CREDENTIALS_PATH}`,
+        `tunnel: ${tunnelName}`,
+        `credentials-file: ${credentialsPathForConfig}`,
         'ingress:',
         ...ingressRules.flatMap((r) => r.hostname
             ? [`  - hostname: ${r.hostname}`, `    service: ${r.service}`]
             : [`  - service: ${r.service}`]),
     ].join('\n');
-    fs.writeFileSync(CONFIG_PATH, configYaml, 'utf8');
+    fs.writeFileSync(configPath, configYaml, 'utf8');
     const firstSubdomain = toTunnelSubdomain(mcps[0].name, mcps[0].config);
     const baseUrl = `https://${firstSubdomain}.${domain}`;
     return new Promise((resolve, reject) => {
-        const proc = spawn('cloudflared', ['tunnel', '--no-autoupdate', '--config', CONFIG_PATH, 'run', TUNNEL_NAME], {
-            stdio: ['ignore', 'pipe', 'pipe'],
-        });
+        const proc = spawn('cloudflared', ['tunnel', '--no-autoupdate', '--config', configPath, 'run', tunnelName], spawnOpts());
+        let stdout = '';
+        let stderr = '';
+        proc.stdout?.on('data', (d) => { stdout += d.toString(); });
+        proc.stderr?.on('data', (d) => { stderr += d.toString(); });
         let resolved = false;
         const timeout = setTimeout(() => {
             if (!resolved) {
@@ -363,13 +412,29 @@ async function startLoggedInTunnel(port, baseDomain, mcps) {
                 reject(new Error('Tunnel did not connect within 30s'));
             }
         }, 30000);
-        proc.on('exit', () => {
+        proc.on('error', (err) => {
+            if (!resolved) {
+                resolved = true;
+                clearTimeout(timeout);
+                cloudflareTunnelProcess = null;
+                cloudflareTunnelUrl = null;
+                reject(new Error(`cloudflared failed: ${err.message}. Is cloudflared in PATH? Windows: winget install Cloudflare.cloudflared`));
+            }
+        });
+        proc.on('exit', (code) => {
             cloudflareTunnelProcess = null;
             cloudflareTunnelUrl = null;
+            if (!resolved && code !== 0 && code !== null) {
+                resolved = true;
+                clearTimeout(timeout);
+                const out = [stdout, stderr].filter(Boolean).join('\n').trim().slice(-500) || 'no output';
+                appendLog({ type: 'tunnel', message: 'cloudflared exited', detail: out, success: false });
+                reject(new Error(`cloudflared exited with code ${code}. ${out}`));
+            }
         });
-        // Resolve after short delay - tunnel connects quickly when config is correct
+        // Resolve after short delay only if process is still running
         setTimeout(() => {
-            if (!resolved) {
+            if (!resolved && (proc.exitCode === null || proc.exitCode === undefined)) {
                 resolved = true;
                 clearTimeout(timeout);
                 cloudflareTunnelProcess = proc;
@@ -402,7 +467,16 @@ export function getOrchestratorTunnelUrl() {
     return cloudflareTunnelUrl;
 }
 export function isCloudflareTunnelActive() {
-    return cloudflareTunnelProcess !== null;
+    if (!cloudflareTunnelProcess)
+        return false;
+    // Process may have exited without clearing our ref (e.g. server restarted, crash)
+    const exitCode = cloudflareTunnelProcess.exitCode;
+    if (exitCode !== null && exitCode !== undefined) {
+        cloudflareTunnelProcess = null;
+        cloudflareTunnelUrl = null;
+        return false;
+    }
+    return true;
 }
 export function isNamedTunnelConfigured() {
     return !!getTunnelToken();
