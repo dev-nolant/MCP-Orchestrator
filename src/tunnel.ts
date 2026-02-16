@@ -89,9 +89,7 @@ export function isCloudflareLoggedIn(): boolean {
  */
 export function runCloudflareLogin(): Promise<{ success: boolean; message: string }> {
   return new Promise((resolve) => {
-    const proc = spawn('cloudflared', ['tunnel', 'login'], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    const proc = spawn('cloudflared', ['tunnel', 'login'], spawnOpts());
 
     const timeout = setTimeout(() => {
       proc.kill('SIGTERM');
@@ -140,9 +138,7 @@ export function runCloudflareLogin(): Promise<{ success: boolean; message: strin
  */
 async function startQuickTunnel(port: number): Promise<{ url: string }> {
   return new Promise((resolve, reject) => {
-    const proc = spawn('cloudflared', ['tunnel', '--url', `http://127.0.0.1:${port}`], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    const proc = spawn('cloudflared', ['tunnel', '--url', `http://127.0.0.1:${port}`], spawnOpts());
 
     let resolved = false;
     const timeout = setTimeout(() => {
@@ -228,9 +224,7 @@ async function startNamedTunnel(port: number): Promise<{ url: string }> {
 
   // Ingress is configured in Cloudflare dashboard — ensure it points to http://localhost:PORT
   return new Promise((resolve, reject) => {
-    const proc = spawn('cloudflared', ['tunnel', '--no-autoupdate', 'run', '--token', token], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    const proc = spawn('cloudflared', ['tunnel', '--no-autoupdate', 'run', '--token', token], spawnOpts());
 
     let resolved = false;
     const timeout = setTimeout(() => {
@@ -325,22 +319,45 @@ async function startNamedTunnel(port: number): Promise<{ url: string }> {
 const TUNNEL_NAME = 'mcp-orchestrator';
 const CREDENTIALS_PATH = path.join(CLOUDFLARED_DIR, 'mcp-orchestrator-credentials.json');
 const CONFIG_PATH = path.join(CLOUDFLARED_DIR, 'mcp-orchestrator-config.yml');
+const CLOUDFLARED_TIMEOUT_MS = 90_000; // tunnel create/route can be slow, esp on Windows
+
+const spawnOpts = (): { stdio: ('ignore' | 'pipe')[]; windowsHide?: boolean } => ({
+  stdio: ['ignore', 'pipe', 'pipe'],
+  ...(process.platform === 'win32' && { windowsHide: true }),
+});
 
 /**
- * Run a cloudflared command and return stdout+stderr.
+ * Run a cloudflared command and return stdout+stderr. Times out to avoid hangs on Windows.
  */
 function runCloudflared(args: string[]): Promise<{ ok: boolean; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
-    const proc = spawn('cloudflared', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const proc = spawn('cloudflared', args, spawnOpts());
     let stdout = '';
     let stderr = '';
+    let resolved = false;
+    const finish = (ok: boolean, out: string, err: string, fromTimeout = false) => {
+      if (resolved) return;
+      resolved = true;
+      if (fromTimeout) proc.kill('SIGTERM');
+      resolve({ ok, stdout: out, stderr: err });
+    };
     proc.stdout?.on('data', (d) => { stdout += d.toString(); });
     proc.stderr?.on('data', (d) => { stderr += d.toString(); });
+    const timer = setTimeout(() => {
+      finish(
+        false,
+        stdout,
+        stderr || 'cloudflared timed out (90s). On Windows, ensure cloudflared is in PATH and not blocked by firewall.',
+        true,
+      );
+    }, CLOUDFLARED_TIMEOUT_MS);
     proc.on('exit', (code) => {
-      resolve({ ok: code === 0, stdout, stderr });
+      clearTimeout(timer);
+      if (!resolved) finish(code === 0, stdout, stderr, false);
     });
     proc.on('error', (err) => {
-      resolve({ ok: false, stdout, stderr: err.message });
+      clearTimeout(timer);
+      if (!resolved) finish(false, stdout, err.message, false);
     });
   });
 }
@@ -423,9 +440,7 @@ async function startLoggedInTunnel(
   const baseUrl = `https://${firstSubdomain}.${domain}`;
 
   return new Promise((resolve, reject) => {
-    const proc = spawn('cloudflared', ['tunnel', '--no-autoupdate', '--config', CONFIG_PATH, 'run', TUNNEL_NAME], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    const proc = spawn('cloudflared', ['tunnel', '--no-autoupdate', '--config', CONFIG_PATH, 'run', TUNNEL_NAME], spawnOpts());
 
     let resolved = false;
     const timeout = setTimeout(() => {
