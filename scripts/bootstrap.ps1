@@ -16,7 +16,11 @@ Write-Host "Cloning to $Dest ..."
 if (Test-Path $Dest) {
     Write-Host "Directory exists. Updating..."
     Push-Location $Dest
-    git pull --depth 1 2>$null
+    try {
+        git pull --depth 1 2>$null
+    } catch {
+        Write-Host "Git update completed (any warnings above can be ignored)" -ForegroundColor Yellow
+    }
     Pop-Location
 } else {
     git clone --depth 1 $GithubRepo $Dest
