@@ -29,7 +29,7 @@ Write-Host ""
 
 # Check Node.js
 try {
-    $nodeVersion = node -v 2>$null
+    $nodeVersion = & node -v 2>$null
     if (-not $nodeVersion) { throw "Node not found" }
     $major = [int]($nodeVersion -replace 'v(\d+)\..*','$1')
     if ($major -lt 18) {
@@ -59,31 +59,14 @@ if ($null -eq $InstallCloudflared) {
 if ($InstallCloudflared) {
     Write-Host ""
     Write-Host "Installing cloudflared..." -ForegroundColor Cyan
-    $cloudflaredInstalled = $false
     if (Get-Command cloudflared -ErrorAction SilentlyContinue) {
         Write-Host "  [OK] cloudflared already installed" -ForegroundColor Green
-        $cloudflaredInstalled = $true
     } elseif (Get-Command winget -ErrorAction SilentlyContinue) {
-        Write-Host "  Installing cloudflared via winget..."
         winget install Cloudflare.cloudflared --accept-source-agreements --accept-package-agreements 2>$null
-        if (Get-Command cloudflared -ErrorAction SilentlyContinue) {
-            Write-Host "  [OK] cloudflared installed" -ForegroundColor Green
-            $cloudflaredInstalled = $true
-        } else {
-            Write-Host "  [!] winget install may have failed. Try: winget install Cloudflare.cloudflared" -ForegroundColor Yellow
-        }
     } elseif (Get-Command choco -ErrorAction SilentlyContinue) {
-        Write-Host "  Installing cloudflared via Chocolatey..."
         choco install cloudflared -y 2>$null
-        if (Get-Command cloudflared -ErrorAction SilentlyContinue) {
-            Write-Host "  [OK] cloudflared installed" -ForegroundColor Green
-            $cloudflaredInstalled = $true
-        } else {
-            Write-Host "  [!] choco install may have failed. Try: choco install cloudflared" -ForegroundColor Yellow
-        }
     } else {
-        Write-Host "  [!] winget/choco not found. Install cloudflared manually:" -ForegroundColor Yellow
-        Write-Host "      https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/download-and-install/" -ForegroundColor Gray
+        Write-Host "  Install manually: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/download-and-install/" -ForegroundColor Yellow
     }
 }
 
@@ -97,9 +80,7 @@ if ($hostsContent -match "127\.0\.0\.1\s+$Hostname") {
         Add-Content -Path $HostsPath -Value "`n# MCP Orchestrator`n$HostsLine" -ErrorAction Stop
         Write-Host "  [OK] Added $Hostname to hosts file"
     } catch {
-        Write-Host "  [!] Could not add to hosts. Run this script as Administrator, or add manually:" -ForegroundColor Yellow
-        Write-Host "      Add this line to $HostsPath : $HostsLine"
-        Write-Host "  You can still use http://localhost:$Port"
+        Write-Host "  Could not add to hosts. Run as Administrator or add manually: $HostsLine"
     }
 }
 
@@ -107,7 +88,7 @@ if ($hostsContent -match "127\.0\.0\.1\s+$Hostname") {
 $Config = Join-Path $OrchDir "mcp-orchestrator.config.json"
 $Example = Join-Path $OrchDir "mcp-orchestrator.config.example.json"
 if (-not (Test-Path $Config) -and (Test-Path $Example)) {
-    Copy-Item $Example $Config
+    Copy-Item $Example $Config -Force
     Write-Host "  [OK] Created mcp-orchestrator.config.json from example" -ForegroundColor Green
 }
 
@@ -128,17 +109,28 @@ if (Test-Path $PidFile) {
     Remove-Item $PidFile -Force -ErrorAction SilentlyContinue
 }
 
-# Start server in background (cmd /c avoids PowerShell bug: RedirectStandardOutput/RedirectStandardError "are same")
+# Start server in background
 Write-Host "`nStarting MCP Orchestrator in background..."
-$runCmd = "node build\server.js 1> `"$LogFile`" 2> `"$ErrFile`""
-$proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c", $runCmd -WorkingDirectory $OrchDir -WindowStyle Hidden -PassThru
-# PID is cmd.exe; node runs as child (stopping cmd stops node)
-$proc.Id | Out-File -FilePath $PidFile -Encoding ascii
 
-Start-Sleep -Seconds 1
+if (Test-Path $LogFile) { Remove-Item $LogFile -Force -ErrorAction SilentlyContinue }
+if (Test-Path $ErrFile) { Remove-Item $ErrFile -Force -ErrorAction SilentlyContinue }
+
+$proc = Start-Process `
+    -FilePath "node" `
+    -ArgumentList "build/server.js" `
+    -WorkingDirectory $OrchDir `
+    -WindowStyle Hidden `
+    -RedirectStandardOutput $LogFile `
+    -RedirectStandardError $ErrFile `
+    -PassThru
+
+$proc.Id | Out-File -FilePath $PidFile -Encoding ascii -Force
+
+Start-Sleep -Seconds 2
 if (Get-Process -Id $proc.Id -ErrorAction SilentlyContinue) {
     Write-Host "  [OK] Server started (PID $($proc.Id))" -ForegroundColor Green
-    Write-Host "`nOpen in your browser:" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "Open in your browser:" -ForegroundColor Cyan
     Write-Host "  http://${Hostname}:${Port}"
     Write-Host "  or http://localhost:${Port}"
     Write-Host ""
@@ -158,11 +150,12 @@ if (Get-Process -Id $proc.Id -ErrorAction SilentlyContinue) {
         Write-Host "To disable: .\scripts\disable-startup.ps1"
     }
 
-    Write-Host "`nTo stop: .\scripts\stop.ps1"
+    Write-Host ""
+    Write-Host "To stop: .\scripts\stop.ps1"
     Write-Host "Logs:   Get-Content $LogFile -Wait -Tail 20"
     Write-Host "Errors: Get-Content $ErrFile -Wait -Tail 20"
 } else {
-    Write-Host "  [!] Server may have failed to start. Check: $LogFile and $ErrFile" -ForegroundColor Yellow
+    Write-Host "  Server may have failed to start. Check: $LogFile and $ErrFile" -ForegroundColor Yellow
     Remove-Item $PidFile -Force -ErrorAction SilentlyContinue
     exit 1
 }
