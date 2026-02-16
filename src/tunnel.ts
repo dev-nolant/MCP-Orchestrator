@@ -423,9 +423,10 @@ async function startLoggedInTunnel(
   });
   ingressRules.push({ service: 'http_status:404' });
 
+  const credentialsPathForConfig = CREDENTIALS_PATH.replace(/\\/g, '/');
   const configYaml = [
     `tunnel: ${TUNNEL_NAME}`,
-    `credentials-file: ${CREDENTIALS_PATH}`,
+    `credentials-file: ${credentialsPathForConfig}`,
     'ingress:',
     ...ingressRules.flatMap((r) =>
       r.hostname
