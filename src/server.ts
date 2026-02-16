@@ -538,6 +538,7 @@ async function main() {
   });
 
   app.get('/api/tunnel/status', (_req, res) => {
+    const active = isCloudflareTunnelActive();
     const secureUrl = getOrchestratorTunnelUrl();
     const securePersisted = getOrchestratorTunnelPersisted();
     const tokenMcps = getTunnelTokenMcpNames();
@@ -558,7 +559,7 @@ async function main() {
       mcpNames.map((n) => [n, (config.mcps[n] as { tunnelSubdomain?: string })?.tunnelSubdomain ?? null]),
     );
     res.json({
-      secure: secureUrl ? { url: secureUrl, cloudflare: isCloudflareTunnelActive() } : null,
+      secure: secureUrl && active ? { url: secureUrl, cloudflare: true } : null,
       securePersisted: securePersisted ? { url: securePersisted.url } : null,
       tokenMcps,
       isNamedConfigured: isNamedTunnelConfigured(),
