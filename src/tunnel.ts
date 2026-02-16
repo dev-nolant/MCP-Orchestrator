@@ -442,6 +442,11 @@ async function startLoggedInTunnel(
   return new Promise((resolve, reject) => {
     const proc = spawn('cloudflared', ['tunnel', '--no-autoupdate', '--config', CONFIG_PATH, 'run', TUNNEL_NAME], spawnOpts());
 
+    let stdout = '';
+    let stderr = '';
+    proc.stdout?.on('data', (d) => { stdout += d.toString(); });
+    proc.stderr?.on('data', (d) => { stderr += d.toString(); });
+
     let resolved = false;
     const timeout = setTimeout(() => {
       if (!resolved) {
@@ -467,7 +472,9 @@ async function startLoggedInTunnel(
       if (!resolved && code !== 0 && code !== null) {
         resolved = true;
         clearTimeout(timeout);
-        reject(new Error(`cloudflared exited with code ${code}. Check logs or run cloudflared manually.`));
+        const out = [stdout, stderr].filter(Boolean).join('\n').trim().slice(-500) || 'no output';
+        appendLog({ type: 'tunnel', message: 'cloudflared exited', detail: out, success: false });
+        reject(new Error(`cloudflared exited with code ${code}. ${out}`));
       }
     });
 
