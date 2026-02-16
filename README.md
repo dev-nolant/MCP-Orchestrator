@@ -1,4 +1,17 @@
+<a name="top"></a>
+<img width="1427" height="321" alt="image" src="https://github.com/user-attachments/assets/e9555ff6-809d-44f6-8ecb-43438a95a6d4" />
+
 # MCP Orchestrator
+
+[![Node.js](https://img.shields.io/badge/Node.js-18+-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+[![TypeScript](https://img.shields.io/badge/language-TypeScript-3178C6)](https://www.typescriptlang.org/)
+[![OS](https://img.shields.io/badge/OS-Linux%2C%20Windows%2C%20macOS-0078D4)](https://github.com/dev-nolant/MCP-Orchestrator)
+[![GitHub release](https://img.shields.io/github/v/release/dev-nolant/MCP-Orchestrator)](https://github.com/dev-nolant/MCP-Orchestrator/releases)
+
+⭐ **Star us on GitHub** — it helps others discover the project!
+
+[![Share on X](https://img.shields.io/badge/share-000000?logo=x&logoColor=white)](https://x.com/intent/tweet?text=Check%20out%20MCP%20Orchestrator%20%E2%80%94%20connect%20and%20chain%20MCPs%20locally%20https://github.com/dev-nolant/MCP-Orchestrator%20%23MCP%20%23AI)
+[![Share on LinkedIn](https://img.shields.io/badge/share-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/sharing/share-offsite/?url=https://github.com/dev-nolant/MCP-Orchestrator)
 
 Connect MCPs locally (via URL or stdio) and automate actions between them. Chain tools from different MCPs—e.g. filesystem `search_files` → memory `create_entities`, or your own MCP combos.
 
@@ -102,6 +115,9 @@ Example: Spotify → Pieces
 One-command installer that runs the server in the background and adds **mcporch.local** so you can open the UI with a friendly URL. By default, the server is set to **auto-start when you log in**.
 
 ### One-line install (paste into terminal)
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/21527bf4-7f41-4483-8b54-3ea3c78b1733" width="682" height="483" />
+</p>
 
 **Mac & Linux:**
 ```bash
@@ -218,6 +234,9 @@ This stops the server and removes the scheduled task.
 If you used a custom install location, run the scripts from that directory instead of `~/mcp-orchestrator`.
 
 ## Web UI
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/be5c416a-f447-46c7-8ed5-34a3e91f9762" width="682" height="483" />
+</p>
 
 ```bash
 npm run ui
@@ -284,6 +303,9 @@ In `claude_desktop_config.json`:
 Ensure the MCP Orchestrator server is running (`npm run ui` or via the install scripts) before using the tools.
 
 ## Public URL (Tunnel)
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/46ed8543-f363-44f9-9577-b16ecf592b4d" width="682" height="483" />
+</p>
 
 Expose **any MCP** to the internet with token auth. Two options:
 
