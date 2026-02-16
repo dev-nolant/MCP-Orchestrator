@@ -15,6 +15,7 @@ DEST="${DEST:-$HOME/mcp-orchestrator}"
 SUBDIR="${SUBDIR:-}"
 
 echo "MCP Orchestrator — bootstrap"
+echo "  Created and maintained by Nolan Taft — https://github.com/dev-nolant/MCP-Orchestrator"
 echo "Cloning to $DEST ..."
 
 if [ -d "$DEST" ]; then

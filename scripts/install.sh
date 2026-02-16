@@ -24,6 +24,9 @@ done
 
 echo "MCP Orchestrator installer"
 echo "=========================="
+echo ""
+echo "  Created and maintained by Nolan Taft — https://github.com/dev-nolant/MCP-Orchestrator"
+echo ""
 
 # Check Node.js
 if ! command -v node &>/dev/null; then

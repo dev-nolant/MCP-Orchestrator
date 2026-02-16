@@ -10,6 +10,7 @@ $Dest = if ($env:DEST) { $env:DEST } else { Join-Path $env:USERPROFILE "mcp-orch
 $Subdir = if ($env:SUBDIR) { $env:SUBDIR } else { "" }
 
 Write-Host "MCP Orchestrator — bootstrap" -ForegroundColor Cyan
+Write-Host "  Created and maintained by Nolan Taft — https://github.com/dev-nolant/MCP-Orchestrator" -ForegroundColor DarkGray
 Write-Host "Cloning to $Dest ..."
 
 if (Test-Path $Dest) {

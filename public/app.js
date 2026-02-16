@@ -9,7 +9,9 @@ let logStore = [];
 
 async function loadLogs() {
   try {
-    logStore = await api('/logs');
+    const res = await fetch(API + '/logs', { cache: 'no-store', headers: { 'Content-Type': 'application/json' } });
+    const data = await res.json().catch(() => []);
+    logStore = Array.isArray(data) ? data : [];
     renderLogsPanel();
     const badge = document.getElementById('logs-badge');
     if (badge) {
@@ -46,6 +48,29 @@ function escapeHtml(s) {
 
 function escapeAttr(s) {
   return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/**
+ * Generate a JSON template from MCP tool inputSchema (JSON Schema).
+ * No LLM needed - deterministic mapping from schema types to empty values.
+ */
+function schemaToTemplate(inputSchema) {
+  if (!inputSchema?.properties || typeof inputSchema.properties !== 'object') return {};
+  const obj = {};
+  for (const [key, prop] of Object.entries(inputSchema.properties)) {
+    if (prop && typeof prop === 'object') {
+      if ('default' in prop) obj[key] = prop.default;
+      else if (prop.type === 'string') obj[key] = '';
+      else if (prop.type === 'number' || prop.type === 'integer') obj[key] = 0;
+      else if (prop.type === 'boolean') obj[key] = false;
+      else if (prop.type === 'object') obj[key] = {};
+      else if (prop.type === 'array') obj[key] = [];
+      else obj[key] = '';
+    } else {
+      obj[key] = '';
+    }
+  }
+  return obj;
 }
 
 /**
@@ -327,19 +352,22 @@ function hideLogsPanel() {
 
 const TAB_STORAGE_KEY = 'mcp-orchestrator-tab';
 const MCP_SUB_STORAGE_KEY = 'mcp-orchestrator-mcp-sub';
-const VALID_TABS = ['mcps', 'workflows', 'schedule', 'run', 'tunnel'];
+const MCP_VIEW_KEY = 'mcp-orchestrator-mcp-view';
+const VALID_TABS = ['mcps', 'workflows', 'schedule', 'run', 'tunnel', 'settings'];
 
 function activateMainTab(tabId) {
   const tab = document.querySelector(`.tab[data-tab="${tabId}"]`);
-  if (!tab) return;
+  if (!tab && tabId !== 'settings') return;
   document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
   document.querySelectorAll('.panel').forEach((p) => p.classList.remove('active'));
-  tab.classList.add('active');
+  document.getElementById('settings-btn')?.classList.toggle('active', tabId === 'settings');
+  if (tab) tab.classList.add('active');
   document.getElementById('panel-' + tabId)?.classList.add('active');
   if (tabId === 'run') renderRunPanel();
   if (tabId === 'schedule') renderSchedulePanel();
   if (tabId === 'mcps') checkMcpStatus();
   if (tabId === 'tunnel') renderTunnelPanel();
+  if (tabId === 'settings') renderSettingsPanel();
 }
 
 function initTabs() {
@@ -356,9 +384,7 @@ function initTabs() {
   if (saved && VALID_TABS.includes(saved)) activateMainTab(saved);
 }
 
-function renderMcpItem(name, mcp) {
-  const isUrl = mcp.type === 'url';
-  const meta = isUrl ? mcp.url : `${mcp.command} ${(mcp.args || []).join(' ')}`;
+function getMcpStatusBadge(name, mcp) {
   const tools = toolsByMcp[name] || [];
   const isDisabled = mcp.enabled === false;
   const st = mcpStatus.status[name];
@@ -367,21 +393,53 @@ function renderMcpItem(name, mcp) {
   const isOffline = !isDisabled && st?.online === false;
   const offlineError = isOffline ? (st.error || 'Connection failed') : '';
 
-  let statusBadge = '';
   if (isDisabled) {
-    statusBadge = '<span class="mcp-status mcp-status-stopped" title="Stopped (spin up to enable)"><span class="mcp-status-dot"></span> Stopped</span>';
-  } else if (isChecking) {
-    statusBadge = '<span class="mcp-status mcp-status-checking" title="Checking…"><span class="mcp-status-dot pulse"></span> Checking…</span>';
-  } else if (isOnline) {
-    statusBadge = `<span class="mcp-status mcp-status-online" title="Online — ${tools.length} tools"><span class="mcp-status-dot"></span> Online</span>`;
-  } else if (isOffline) {
-    statusBadge = `<span class="mcp-status mcp-status-offline" title="${escapeAttr(offlineError)}"><span class="mcp-status-dot"></span> Offline</span>`;
-  } else {
-    statusBadge = '<span class="mcp-status mcp-status-unknown" title="Click Check status">—</span>';
+    return '<span class="mcp-status mcp-status-stopped" title="Stopped (spin up to enable)"><span class="mcp-status-dot"></span> Stopped</span>';
   }
+  if (isChecking) {
+    return '<span class="mcp-status mcp-status-checking" title="Checking…"><span class="mcp-status-dot pulse"></span> Checking…</span>';
+  }
+  if (isOnline) {
+    return `<span class="mcp-status mcp-status-online" title="Online — ${tools.length} tools"><span class="mcp-status-dot"></span> Online</span>`;
+  }
+  if (isOffline) {
+    return `<span class="mcp-status mcp-status-offline" title="${escapeAttr(offlineError)}"><span class="mcp-status-dot"></span> Offline</span>`;
+  }
+  return '<span class="mcp-status mcp-status-unknown" title="Click Check status">—</span>';
+}
+
+function renderMcpItemCard(name, mcp) {
+  const tools = toolsByMcp[name] || [];
+  const isDisabled = mcp.enabled === false;
+  const statusBadge = getMcpStatusBadge(name, mcp);
 
   return `
-    <div class="mcp-item ${isDisabled ? 'mcp-item-disabled' : ''}" data-name="${escapeAttr(name)}">
+    <div class="mcp-item mcp-item-card ${isDisabled ? 'mcp-item-disabled' : ''}" data-name="${escapeAttr(name)}">
+      <div class="mcp-item-card-header">
+        <span class="mcp-item-title">${escapeHtml(name)}</span>
+        ${statusBadge}
+      </div>
+      <div class="mcp-item-card-meta">${tools.length} tool${tools.length !== 1 ? 's' : ''}</div>
+      <div class="mcp-item-actions mcp-item-card-actions">
+        <button type="button" class="btn btn-ghost btn-spin-mcp" title="${isDisabled ? 'Spin up' : 'Spin down'}">${isDisabled ? '▶' : '■'}</button>
+        <button type="button" class="btn btn-ghost btn-edit-mcp">Edit</button>
+        <button type="button" class="btn btn-danger btn-delete-mcp">Delete</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderMcpItem(name, mcp) {
+  const isUrl = mcp.type === 'url';
+  const meta = isUrl ? mcp.url : `${mcp.command} ${(mcp.args || []).join(' ')}`;
+  const tools = toolsByMcp[name] || [];
+  const isDisabled = mcp.enabled === false;
+  const isOffline = !isDisabled && mcpStatus.status[name]?.online === false;
+  const offlineError = isOffline ? (mcpStatus.status[name]?.error || 'Connection failed') : '';
+  const statusBadge = getMcpStatusBadge(name, mcp);
+
+  return `
+    <div class="mcp-item mcp-item-expanded ${isDisabled ? 'mcp-item-disabled' : ''}" data-name="${escapeAttr(name)}">
       <div class="mcp-item-header">
         <div>
           <div class="mcp-item-title-row">
@@ -416,26 +474,309 @@ function renderMcpItem(name, mcp) {
   `;
 }
 
+function getMcpViewMode() {
+  try {
+    const saved = localStorage.getItem(MCP_VIEW_KEY);
+    return saved === 'expanded' ? 'expanded' : 'card';
+  } catch {
+    return 'card';
+  }
+}
+
+let mcpWikiOpenFor = null;
+let mcpWikiSearchQuery = '';
+let mcpWikiActiveTab = 'overview';
+
+function showMcpWiki(name) {
+  mcpWikiOpenFor = name;
+  mcpWikiSearchQuery = '';
+  mcpWikiActiveTab = 'overview';
+  document.getElementById('mcp-wiki-modal-overlay').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  renderMcpWiki(name);
+}
+
+function hideMcpWiki() {
+  mcpWikiOpenFor = null;
+  document.getElementById('mcp-wiki-modal-overlay').classList.add('hidden');
+  document.body.style.overflow = '';
+}
+
+function getWorkflowsUsingMcp(mcpName) {
+  return config.workflows.filter((w) =>
+    w.steps?.some((s) => (s.mcp || '').toLowerCase() === (mcpName || '').toLowerCase())
+  );
+}
+
+function renderMcpWiki(name) {
+  const mcp = config.mcps[name];
+  if (!mcp) return;
+  const tools = toolsByMcp[name] || [];
+  const workflows = getWorkflowsUsingMcp(name);
+  const scheduled = workflows.filter((w) => w.trigger === 'schedule' && w.schedule?.trim());
+  const manual = workflows.filter((w) => w.trigger !== 'schedule' || !w.schedule?.trim());
+
+  const q = (mcpWikiSearchQuery || '').toLowerCase().trim();
+  const filteredTools = q
+    ? tools.filter(
+        (t) =>
+          (t.name || '').toLowerCase().includes(q) ||
+          (t.description || '').toLowerCase().includes(q)
+      )
+    : tools;
+
+  const isUrl = mcp.type === 'url';
+  const meta = isUrl ? mcp.url : `${mcp.command} ${(mcp.args || []).join(' ')}`;
+  const isDisabled = mcp.enabled === false;
+
+  document.getElementById('mcp-wiki-modal-title').textContent = name;
+  document.getElementById('mcp-wiki-modal-status').innerHTML = getMcpStatusBadge(name, mcp);
+
+  const spinBtn = document.querySelector('.btn-wiki-spin');
+  if (spinBtn) {
+    spinBtn.textContent = isDisabled ? '▶ Spin up' : '■ Spin down';
+    spinBtn.title = isDisabled ? 'Spin up' : 'Spin down';
+  }
+
+  // Overview pane
+  const overviewHtml = `
+    <div class="wiki-overview-grid">
+      <div class="wiki-overview-card">
+        <div class="wiki-overview-label">Type</div>
+        <div class="wiki-overview-value">${isUrl ? 'URL' : 'Stdio'}</div>
+      </div>
+      <div class="wiki-overview-card">
+        <div class="wiki-overview-label">Tools</div>
+        <div class="wiki-overview-value">${tools.length}</div>
+      </div>
+      <div class="wiki-overview-card">
+        <div class="wiki-overview-label">Workflows</div>
+        <div class="wiki-overview-value">${workflows.length}</div>
+      </div>
+      <div class="wiki-overview-card wiki-overview-card-wide">
+        <div class="wiki-overview-label">Connection</div>
+        <div class="wiki-overview-value"><code>${escapeHtml(meta)}</code></div>
+      </div>
+    </div>
+  `;
+  document.getElementById('wiki-pane-overview').innerHTML = overviewHtml;
+
+  // Tools pane
+  let toolsHtml = '';
+  if (filteredTools.length === 0) {
+    toolsHtml = `<p class="mcp-wiki-empty">${q ? 'No tools match your search.' : 'No tools loaded. Spin up the MCP and click Check status.'}</p>`;
+  } else {
+    toolsHtml = filteredTools
+      .map(
+        (t) => `
+      <div class="mcp-wiki-tool-card" data-tool-name="${escapeAttr(t.name)}">
+        <div class="mcp-wiki-tool-card-header">
+          <span class="mcp-wiki-tool-name">${escapeHtml(t.name)}</span>
+          <span class="mcp-wiki-tool-expand">▼</span>
+        </div>
+        ${t.description ? `<div class="mcp-wiki-tool-desc">${escapeHtml(t.description.slice(0, 150))}${(t.description || '').length > 150 ? '…' : ''}</div>` : ''}
+        <div class="mcp-wiki-tool-schema-wrap hidden" data-schema-wrap>
+          <div class="mcp-wiki-tool-schema-row">
+            <pre class="mcp-wiki-tool-schema" data-schema></pre>
+            <button type="button" class="btn btn-ghost btn-copy-schema" title="Copy schema">Copy</button>
+          </div>
+        </div>
+      </div>
+    `
+      )
+      .join('');
+  }
+  const toolsPane = document.getElementById('wiki-pane-tools');
+  const existingSearch = toolsPane.querySelector('#mcp-wiki-search');
+  if (!existingSearch) {
+    toolsPane.innerHTML = `
+      <div class="wiki-tools-search-wrap">
+        <input type="search" id="mcp-wiki-search" placeholder="Search tools…" class="mcp-wiki-search" value="${escapeAttr(mcpWikiSearchQuery)}" autocomplete="off" />
+      </div>
+      <div id="mcp-wiki-tools-list" class="mcp-wiki-tools-list">${toolsHtml}</div>
+    `;
+    toolsPane.querySelector('#mcp-wiki-search')?.addEventListener('input', () => {
+      mcpWikiSearchQuery = document.getElementById('mcp-wiki-search')?.value || '';
+      renderMcpWiki(name);
+    });
+  } else {
+    const listEl = document.getElementById('mcp-wiki-tools-list');
+    if (listEl) listEl.innerHTML = toolsHtml;
+  }
+
+  // Implementations pane
+  const workflowToHtml = (w) => {
+    const idx = config.workflows.indexOf(w);
+    const isSched = w.trigger === 'schedule' && w.schedule?.trim();
+    const steps = (w.steps || [])
+      .filter((s) => (s.mcp || '').toLowerCase() === (name || '').toLowerCase())
+      .map((s) => s.tool)
+      .join(', ');
+    return `
+      <div class="mcp-wiki-impl-card wiki-impl-workflow" data-index="${idx}">
+        <div class="mcp-wiki-impl-card-body">
+          <span class="mcp-wiki-impl-name">${escapeHtml(w.name)}</span>
+          ${steps ? `<span class="mcp-wiki-impl-meta">${escapeHtml(steps)}</span>` : ''}
+        </div>
+        ${isSched ? `<span class="mcp-wiki-impl-badge">${escapeHtml(w.schedule || '')}</span>` : '<span class="mcp-wiki-impl-badge mcp-wiki-impl-badge-manual">Manual</span>'}
+      </div>
+    `;
+  };
+  let implHtml = '';
+  if (workflows.length === 0) {
+    implHtml = '<p class="mcp-wiki-empty">No workflows use this MCP yet. Add one in the Workflows tab.</p>';
+  } else {
+    implHtml =
+      (scheduled.length > 0
+        ? `<h4 class="wiki-pane-subtitle">Scheduled</h4><div class="mcp-wiki-impl-list">${scheduled.map(workflowToHtml).join('')}</div>`
+        : '') +
+      (manual.length > 0
+        ? `<h4 class="wiki-pane-subtitle">Manual</h4><div class="mcp-wiki-impl-list">${manual.map(workflowToHtml).join('')}</div>`
+        : '');
+  }
+  document.getElementById('wiki-pane-implementations').innerHTML = implHtml;
+
+  // Tab switching
+  document.querySelectorAll('.mcp-wiki-tab').forEach((tab) => {
+    tab.classList.toggle('active', tab.dataset.tab === mcpWikiActiveTab);
+  });
+  document.querySelectorAll('.mcp-wiki-pane').forEach((pane) => {
+    pane.classList.toggle('active', pane.dataset.pane === mcpWikiActiveTab);
+  });
+
+  // Tool expand + copy
+  document.querySelectorAll('.mcp-wiki-tool-card').forEach((el) => {
+    const schemaWrap = el.querySelector('[data-schema-wrap]');
+    const schemaEl = el.querySelector('[data-schema]');
+    const expandIcon = el.querySelector('.mcp-wiki-tool-expand');
+    el.querySelector('.mcp-wiki-tool-card-header')?.addEventListener('click', () => {
+      if (!schemaWrap || !schemaEl) return;
+      if (schemaWrap.classList.contains('hidden')) {
+        const tool = tools.find((t) => t.name === el.dataset.toolName);
+        if (tool?.inputSchema) {
+          schemaEl.textContent = JSON.stringify(tool.inputSchema, null, 2);
+        } else {
+          schemaEl.textContent = '(no schema)';
+        }
+        schemaWrap.classList.remove('hidden');
+        if (expandIcon) expandIcon.textContent = '▲';
+      } else {
+        schemaWrap.classList.add('hidden');
+        if (expandIcon) expandIcon.textContent = '▼';
+      }
+    });
+    el.querySelector('.btn-copy-schema')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const text = schemaEl?.textContent || '';
+      if (text && text !== '(no schema)') {
+        navigator.clipboard?.writeText(text).then(() => {
+          const btn = e.target;
+          const orig = btn.textContent;
+          btn.textContent = 'Copied!';
+          setTimeout(() => (btn.textContent = orig), 1200);
+        });
+      }
+    });
+  });
+
+  document.querySelectorAll('.wiki-impl-workflow').forEach((el) => {
+    el.addEventListener('click', () => {
+      const idx = parseInt(el.dataset.index, 10);
+      if (isNaN(idx)) return;
+      editingWorkflowIndex = idx;
+      hideMcpWiki();
+      activateMainTab('workflows');
+      showWorkflowModal();
+    });
+  });
+
+}
+
+function initMcpWiki() {
+  document.querySelector('.mcp-wiki-close')?.addEventListener('click', hideMcpWiki);
+  document.getElementById('mcp-wiki-modal-overlay')?.addEventListener('click', (e) => {
+    if (e.target.id === 'mcp-wiki-modal-overlay') hideMcpWiki();
+  });
+  document.getElementById('mcp-wiki-modal')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (e.target.closest('.btn-wiki-edit')) {
+      e.preventDefault();
+      const nameToEdit = mcpWikiOpenFor;
+      if (nameToEdit) {
+        hideMcpWiki();
+        showMcpModal(nameToEdit);
+      }
+    }
+    if (e.target.closest('.btn-wiki-spin')) {
+      e.preventDefault();
+      if (!mcpWikiOpenFor) return;
+      const mcp = config.mcps[mcpWikiOpenFor];
+      if (!mcp) return;
+      const isDisabled = mcp.enabled === false;
+      api(`/mcp/${encodeURIComponent(mcpWikiOpenFor)}/enabled`, {
+        method: 'PATCH',
+        body: JSON.stringify({ enabled: isDisabled }),
+      })
+        .then(async () => {
+          mcp.enabled = isDisabled;
+          await loadConfig();
+          await loadTools();
+          checkMcpStatus();
+          renderMcpWiki(mcpWikiOpenFor);
+          renderMcpsPanel();
+        })
+        .catch((err) => alert(err.message || 'Failed'));
+    }
+  });
+
+  document.querySelectorAll('.mcp-wiki-tab').forEach((tab) => {
+    tab.addEventListener('click', () => {
+      mcpWikiActiveTab = tab.dataset.tab;
+      document.querySelectorAll('.mcp-wiki-tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === mcpWikiActiveTab));
+      document.querySelectorAll('.mcp-wiki-pane').forEach((p) => p.classList.toggle('active', p.dataset.pane === mcpWikiActiveTab));
+    });
+  });
+}
+
 function renderMcpsPanel() {
   const list = document.getElementById('mcps-list');
   const banner = document.getElementById('mcp-checking-banner');
   if (banner) banner.classList.toggle('hidden', !mcpStatus.checking);
+
+  const viewMode = getMcpViewMode();
+  list.classList.toggle('mcps-card-view', viewMode === 'card');
+  list.classList.toggle('mcps-expanded-view', viewMode === 'expanded');
+
+  document.querySelectorAll('.mcp-view-btn').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.view === viewMode);
+  });
 
   const entries = Object.entries(config.mcps);
   if (entries.length === 0) {
     list.innerHTML = '<div class="empty-state">No MCPs yet. Add one by URL or file (stdio).</div>';
     return;
   }
-  list.innerHTML = entries.map(([name, mcp]) => renderMcpItem(name, mcp)).join('');
+  const renderFn = viewMode === 'card' ? renderMcpItemCard : renderMcpItem;
+  list.innerHTML = entries.map(([name, mcp]) => renderFn(name, mcp)).join('');
+
+  list.querySelectorAll('.mcp-item').forEach((item) => {
+    item.addEventListener('click', (e) => {
+      if (e.target.closest('.mcp-item-actions')) return;
+      const name = item.dataset.name;
+      if (name) showMcpWiki(name);
+    });
+  });
 
   list.querySelectorAll('.btn-edit-mcp').forEach((btn) => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
       const name = btn.closest('.mcp-item').dataset.name;
       showMcpModal(name);
     });
   });
   list.querySelectorAll('.btn-delete-mcp').forEach((btn) => {
-    btn.addEventListener('click', async () => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
       const name = btn.closest('.mcp-item').dataset.name;
       if (!confirm(`Delete MCP "${name}"?`)) return;
       delete config.mcps[name];
@@ -446,7 +787,8 @@ function renderMcpsPanel() {
     });
   });
   list.querySelectorAll('.btn-spin-mcp').forEach((btn) => {
-    btn.addEventListener('click', async () => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
       const name = btn.closest('.mcp-item').dataset.name;
       const mcp = config.mcps[name];
       if (!mcp) return;
@@ -619,6 +961,19 @@ function activateMcpSubTab(subId) {
   tab.classList.add('active');
   document.getElementById('mcp-sub-panel-' + subId)?.classList.add('active');
   if (subId === 'discover') renderDiscoverPanel();
+}
+
+function initMcpViewToggle() {
+  document.querySelectorAll('.mcp-view-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const view = btn.dataset.view;
+      if (!view) return;
+      try {
+        localStorage.setItem(MCP_VIEW_KEY, view);
+      } catch (_) {}
+      renderMcpsPanel();
+    });
+  });
 }
 
 function initMcpSubTabs() {
@@ -1159,6 +1514,7 @@ function showWorkflowModal(existingIndex = null) {
             <div class="args-mode-toggle">
               <button type="button" class="args-mode-btn active" data-mode="edit">Edit</button>
               <button type="button" class="args-mode-btn" data-mode="preview" title="">Preview</button>
+              <button type="button" class="args-fill-template hidden" title="Fill with template from tool schema">Fill template</button>
             </div>
             <div class="args-content">
               <textarea class="args-input" placeholder='{} = no args'>${escapeHtml(JSON.stringify(s.args || {}, null, 2))}</textarea>
@@ -1403,7 +1759,6 @@ function showWorkflowModal(existingIndex = null) {
   parseAndInitSchedule();
 
   const container = document.getElementById('steps-container');
-  const mcpSelects = container.querySelectorAll('.mcp-select');
   const stepOutputsByBlock = new Map();
 
   function getReferencedStepIndices(argsStr) {
@@ -1500,6 +1855,7 @@ function showWorkflowModal(existingIndex = null) {
           <div class="args-mode-toggle">
             <button type="button" class="args-mode-btn active" data-mode="edit">Edit</button>
             <button type="button" class="args-mode-btn" data-mode="preview">Preview</button>
+            <button type="button" class="args-fill-template hidden" title="Fill with template from tool schema">Fill template</button>
           </div>
           <div class="args-content">
             <textarea class="args-input" placeholder='{} = no args'>${escapeHtml(JSON.stringify(args, null, 2))}</textarea>
@@ -1517,6 +1873,17 @@ function showWorkflowModal(existingIndex = null) {
     `;
     container.appendChild(block);
     bindStepRow(block);
+    const argsInput = block.querySelector('.args-input');
+    if (argsInput && (!argsInput.value.trim() || argsInput.value.trim() === '{}')) {
+      const mcpSel = block.querySelector('.mcp-select');
+      const toolSel = block.querySelector('.tool-select');
+      const tools = toolsByMcp[mcpSel?.value] || [];
+      const toolDef = tools.find((t) => t.name === toolSel?.value);
+      if (toolDef?.inputSchema) {
+        const template = schemaToTemplate(toolDef.inputSchema);
+        if (Object.keys(template).length > 0) argsInput.value = JSON.stringify(template, null, 2);
+      }
+    }
     refreshAllPreviews();
   }
 
@@ -1527,10 +1894,85 @@ function showWorkflowModal(existingIndex = null) {
     const argsInput = block.querySelector('.args-input');
     const resultDiv = block.querySelector('.step-result');
 
+    function maybeFillArgsFromSchema(force = false) {
+      const mcp = mcpSelect.value;
+      const tool = toolSelect.value;
+      const tools = toolsByMcp[mcp] || [];
+      const toolDef = tools.find((t) => t.name === tool);
+      if (!toolDef?.inputSchema) return;
+      const argsInput = block.querySelector('.args-input');
+      const current = argsInput.value.trim();
+      const template = schemaToTemplate(toolDef.inputSchema);
+      if (Object.keys(template).length === 0) return;
+      const userHasEdited = block.dataset.argsUserEdited === '1';
+      if (!force && userHasEdited) return;
+      const isEmpty = !current || current === '{}';
+      const alreadyMatches = argsMatchTemplate(current, template);
+      if (!force && !isEmpty && alreadyMatches) return;
+      argsInput.value = JSON.stringify(template, null, 2);
+      delete block.dataset.argsUserEdited;
+      refreshPreviewState(block);
+      updateFillTemplateVisibility();
+    }
+
+    function argsMatchTemplate(current, template) {
+      try {
+        const curr = JSON.parse(current);
+        if (typeof curr !== 'object' || curr === null) return false;
+        for (const k of Object.keys(template)) {
+          if (!(k in curr) || curr[k] !== template[k]) return false;
+        }
+        return Object.keys(curr).length === Object.keys(template).length;
+      } catch {
+        return false;
+      }
+    }
+
+    function updateFillTemplateVisibility() {
+      const fillBtn = block.querySelector('.args-fill-template');
+      if (!fillBtn) return;
+      const mcp = mcpSelect.value;
+      const tool = toolSelect.value;
+      const tools = toolsByMcp[mcp] || [];
+      const toolDef = tools.find((t) => t.name === tool);
+      if (!toolDef?.inputSchema) {
+        fillBtn.classList.add('hidden');
+        return;
+      }
+      const template = schemaToTemplate(toolDef.inputSchema);
+      if (Object.keys(template).length === 0) {
+        fillBtn.classList.add('hidden');
+        return;
+      }
+      const current = argsInput.value.trim();
+      if (!current || current === '{}' || argsMatchTemplate(current, template)) {
+        fillBtn.classList.add('hidden');
+      } else {
+        fillBtn.classList.remove('hidden');
+      }
+    }
+
     mcpSelect.addEventListener('change', () => {
       const tools = toolsByMcp[mcpSelect.value] || [];
       toolSelect.innerHTML = tools.map((t) => `<option value="${escapeAttr(t.name)}">${escapeHtml(t.name)}</option>`).join('');
+      if (tools.length) {
+        toolSelect.value = tools[0].name;
+        maybeFillArgsFromSchema();
+      }
+      updateFillTemplateVisibility();
     });
+
+    toolSelect.addEventListener('change', () => {
+      maybeFillArgsFromSchema();
+      updateFillTemplateVisibility();
+    });
+
+    argsInput.addEventListener('input', () => {
+      block.dataset.argsUserEdited = '1';
+      updateFillTemplateVisibility();
+    });
+
+    block.querySelector('.args-fill-template')?.addEventListener('click', () => maybeFillArgsFromSchema(true));
 
     block.querySelector('.step-test').addEventListener('click', async () => {
       const btn = block.querySelector('.step-test');
@@ -1629,19 +2071,24 @@ function showWorkflowModal(existingIndex = null) {
       block.remove();
       refreshAllPreviews();
     });
+
+    const initialContent = argsInput.value.trim();
+    if (initialContent && initialContent !== '{}') {
+      const mcp = mcpSelect.value;
+      const tool = toolSelect.value;
+      const tools = toolsByMcp[mcp] || [];
+      const toolDef = tools.find((t) => t.name === tool);
+      const template = toolDef?.inputSchema ? schemaToTemplate(toolDef.inputSchema) : {};
+      if (Object.keys(template).length > 0 && !argsMatchTemplate(initialContent, template)) {
+        block.dataset.argsUserEdited = '1';
+      }
+    }
+
+    updateFillTemplateVisibility();
   }
 
   container.querySelectorAll('.step-block').forEach(bindStepRow);
   refreshAllPreviews();
-
-  mcpSelects.forEach((sel) => {
-    sel.addEventListener('change', () => {
-      const block = sel.closest('.step-block');
-      const toolSelect = block.querySelector('.tool-select');
-      const tools = toolsByMcp[sel.value] || [];
-      toolSelect.innerHTML = tools.map((t) => `<option value="${escapeAttr(t.name)}">${escapeHtml(t.name)}</option>`).join('');
-    });
-  });
 
   document.querySelector('.add-step-btn').addEventListener('click', () => addStep());
 
@@ -1804,21 +2251,34 @@ function renderRunPanel() {
   });
 }
 
+document.getElementById('settings-btn')?.addEventListener('click', () => activateMainTab('settings'));
 document.getElementById('logs-btn')?.addEventListener('click', () => showLogsPanel());
 document.getElementById('logs-close-btn')?.addEventListener('click', () => hideLogsPanel());
 document.getElementById('logs-overlay')?.addEventListener('click', () => hideLogsPanel());
 document.getElementById('logs-filter')?.addEventListener('change', () => renderLogsPanel());
-document.querySelector('.btn-logs-download')?.addEventListener('click', () => {
+document.querySelector('.btn-logs-download')?.addEventListener('click', async () => {
   const filter = document.getElementById('logs-filter')?.value || 'all';
   const filtered = filter === 'all' ? logStore : logStore.filter((e) => e.type === filter);
-  const lines = filtered.map((e) => {
-    const status = e.success !== false ? 'ok' : 'failed';
-    return `[${e.ts}] [${e.type}] [${status}] ${e.message}${e.detail ? '\n  ' + e.detail : ''}`;
-  });
-  const blob = new Blob([lines.join('\n\n')], { type: 'text/plain' });
+  let serverInfo = {};
+  try {
+    serverInfo = await api('/server-info');
+  } catch (_) {}
+  const exportData = {
+    exportedAt: new Date().toISOString(),
+    filter: filter === 'all' ? 'all' : filter,
+    count: filtered.length,
+    server: {
+      port: serverInfo.port,
+      cwd: serverInfo.cwd,
+      configPath: serverInfo.configPath,
+      logsPath: serverInfo.logsPath,
+    },
+    logs: filtered,
+  };
+  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `mcp-orchestrator-logs-${new Date().toISOString().slice(0, 10)}.txt`;
+  a.download = `mcp-orchestrator-logs-${new Date().toISOString().slice(0, 10)}.json`;
   a.click();
   URL.revokeObjectURL(a.href);
 });
@@ -1831,6 +2291,164 @@ document.querySelector('.btn-logs-clear')?.addEventListener('click', async () =>
     await loadLogs();
   }
 });
+
+async function renderSettingsPanel() {
+  const serverInfoEl = document.getElementById('settings-server-info');
+  const secretsListEl = document.getElementById('settings-secrets-list');
+  const tunnelTokenEl = document.getElementById('settings-tunnel-token');
+  const tunnelUrlEl = document.getElementById('settings-tunnel-url');
+  const tunnelStatusEl = document.getElementById('settings-tunnel-status');
+
+  try {
+    const info = await api('/server-info');
+    serverInfoEl.innerHTML = `
+      <dl class="settings-dl">
+        <dt title="Port the MCP Orchestrator server listens on (set via PORT env var)">Port</dt>
+        <dd><code>${escapeHtml(String(info.port))}</code></dd>
+        <dt title="Directory where config and secrets files are stored">Working directory</dt>
+        <dd><code>${escapeHtml(info.cwd)}</code></dd>
+        <dt title="Main config file: MCPs and workflows">Config file</dt>
+        <dd><code>${escapeHtml(info.configPath)}</code></dd>
+        <dt title="Gitignored file for tokens and API keys">Secrets file</dt>
+        <dd><code>${escapeHtml(info.secretsPath)}</code></dd>
+        <dt title="Activity and workflow run logs">Logs file</dt>
+        <dd><code>${escapeHtml(info.logsPath)}</code></dd>
+      </dl>
+    `;
+  } catch {
+    serverInfoEl.innerHTML = '<p class="settings-error">Could not load server info.</p>';
+  }
+
+  try {
+    const { keys } = await api('/secrets/keys');
+
+    if (keys.length === 0) {
+      secretsListEl.innerHTML = '<p class="settings-empty">No secrets stored yet. Add one below or configure Cloudflare tunnel above.</p>';
+    } else {
+      secretsListEl.innerHTML = keys
+        .map(
+          (key) =>
+            `<div class="settings-secret-row" data-key="${escapeAttr(key)}">
+              <span class="settings-secret-key-name" title="${key.startsWith(tunnelPrefix) ? 'Token for MCP: ' + key.slice(tunnelPrefix.length) : 'Secret key'}"><code>${escapeHtml(key)}</code></span>
+              <span class="settings-secret-mask">●●●●●●●●</span>
+              <button type="button" class="btn btn-ghost btn-delete-secret" title="Remove this secret">Delete</button>
+            </div>`
+        )
+        .join('');
+
+      secretsListEl.querySelectorAll('.btn-delete-secret').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const row = btn.closest('.settings-secret-row');
+          const key = row?.dataset.key;
+          if (!key || !confirm(`Delete secret "${key}"?`)) return;
+          try {
+            await api(`/secrets/${encodeURIComponent(key)}`, { method: 'DELETE' });
+            renderSettingsPanel();
+          } catch (err) {
+            alert(err.message || 'Failed to delete');
+          }
+        });
+      });
+    }
+  } catch {
+    secretsListEl.innerHTML = '<p class="settings-error">Could not load secrets.</p>';
+  }
+
+  tunnelTokenEl.value = '';
+  tunnelUrlEl.value = '';
+  const tunnelDomainEl = document.getElementById('settings-tunnel-domain');
+  if (tunnelDomainEl) tunnelDomainEl.value = '';
+  tunnelStatusEl.textContent = '';
+  try {
+    await api('/secrets/cloudflare_tunnel_token');
+    tunnelTokenEl.placeholder = '●●●●●●●● (enter new value to replace)';
+  } catch {
+    tunnelTokenEl.placeholder = 'Paste from Cloudflare dashboard';
+  }
+  try {
+    await api('/secrets/cloudflare_tunnel_public_url');
+    tunnelUrlEl.placeholder = '●●●●●●●● (enter new value to replace)';
+  } catch {
+    tunnelUrlEl.placeholder = 'https://mcp.example.com';
+  }
+  if (tunnelDomainEl) {
+    try {
+      await api('/secrets/cloudflare_tunnel_domain');
+      tunnelDomainEl.placeholder = '●●●●●●●● (enter new value to replace)';
+    } catch {
+      tunnelDomainEl.placeholder = 'mcp.example.com';
+    }
+  }
+}
+
+function initSettingsPanel() {
+  document.getElementById('settings-secret-add')?.addEventListener('click', async () => {
+    const keyEl = document.getElementById('settings-secret-key');
+    const valueEl = document.getElementById('settings-secret-value');
+    const key = (keyEl?.value || '').trim();
+    const value = valueEl?.value ?? '';
+    if (!key) {
+      alert('Enter a key name.');
+      return;
+    }
+    try {
+      await api(`/secrets/${encodeURIComponent(key)}`, {
+        method: 'PUT',
+        body: JSON.stringify({ value }),
+      });
+      keyEl.value = '';
+      valueEl.value = '';
+      renderSettingsPanel();
+    } catch (err) {
+      alert(err.message || 'Failed to save secret');
+    }
+  });
+
+  document.getElementById('settings-tunnel-save')?.addEventListener('click', async () => {
+    const tokenEl = document.getElementById('settings-tunnel-token');
+    const urlEl = document.getElementById('settings-tunnel-url');
+    const domainEl = document.getElementById('settings-tunnel-domain');
+    const statusEl = document.getElementById('settings-tunnel-status');
+    const token = (tokenEl?.value || '').trim();
+    const url = (urlEl?.value || '').trim();
+    const domain = (domainEl?.value || '').trim();
+    if (!token && !url && !domain) {
+      statusEl.textContent = 'Enter at least token, public URL, or domain.';
+      statusEl.classList.add('error');
+      return;
+    }
+    try {
+      if (token) {
+        await api('/secrets/cloudflare_tunnel_token', {
+          method: 'PUT',
+          body: JSON.stringify({ value: token }),
+        });
+        tokenEl.value = '';
+      }
+      if (url) {
+        await api('/secrets/cloudflare_tunnel_public_url', {
+          method: 'PUT',
+          body: JSON.stringify({ value: url }),
+        });
+        urlEl.value = '';
+      }
+      if (domain && domainEl) {
+        await api('/tunnel/domain', {
+          method: 'PUT',
+          body: JSON.stringify({ domain }),
+        });
+        domainEl.value = '';
+      }
+      statusEl.textContent = 'Saved.';
+      statusEl.classList.remove('error');
+      renderSettingsPanel();
+      setTimeout(() => (statusEl.textContent = ''), 2000);
+    } catch (err) {
+      statusEl.textContent = err.message || 'Failed to save';
+      statusEl.classList.add('error');
+    }
+  });
+}
 
 document.getElementById('add-mcp-btn').addEventListener('click', () => showMcpModal());
 document.getElementById('check-mcp-status-btn').addEventListener('click', () => checkMcpStatus());
@@ -1850,6 +2468,7 @@ document.getElementById('modal-overlay').addEventListener('click', (e) => {
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if (!document.getElementById('modal-overlay')?.classList.contains('hidden')) hideModal();
+    else if (!document.getElementById('mcp-wiki-modal-overlay')?.classList.contains('hidden')) hideMcpWiki();
     else if (document.getElementById('logs-panel')?.classList.contains('open')) hideLogsPanel();
   }
 });
@@ -1859,8 +2478,11 @@ async function init() {
   outputEl.innerHTML = '<p class="placeholder">Loading...</p>';
 
   initTabs();
+  initMcpViewToggle();
   initMcpSubTabs();
+  initMcpWiki();
   initTunnelPanel();
+  initSettingsPanel();
 
   try {
     await loadConfig();
