@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { resolveStdioCommand } from './connector.js';
 import { isJSONRPCRequest } from '@modelcontextprotocol/sdk/types.js';
 /**
  * Start an HTTP-to-stdio bridge for the given stdio MCP config.
@@ -13,10 +14,7 @@ import { isJSONRPCRequest } from '@modelcontextprotocol/sdk/types.js';
  */
 export async function startStdioBridge(mcpName, config) {
     const pendingResponses = new Map();
-    // Resolve 'node' to process.execPath so spawn works when PATH is minimal (e.g. launchd/systemd)
-    const command = config.command === 'node' || config.command === 'node.exe'
-        ? process.execPath
-        : config.command;
+    const command = resolveStdioCommand(config.command);
     const stdioTransport = new StdioClientTransport({
         command,
         args: config.args ?? [],

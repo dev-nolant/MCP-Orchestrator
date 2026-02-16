@@ -1,8 +1,19 @@
+import path from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { resolveAuthorizationToken } from './auth-resolver.js';
 import type { McpConfig } from './config.js';
+
+/** Resolve node/npx to full paths so spawn works when PATH is minimal (e.g. launchd/systemd). */
+export function resolveStdioCommand(command: string): string {
+  if (command === 'node' || command === 'node.exe') return process.execPath;
+  if (command === 'npx' || command === 'npx.cmd') {
+    const dir = path.dirname(process.execPath);
+    return path.join(dir, process.platform === 'win32' ? 'npx.cmd' : 'npx');
+  }
+  return command;
+}
 
 export function createMcpClient(name: string, config: McpConfig): {
   client: Client;
@@ -24,11 +35,7 @@ export function createMcpClient(name: string, config: McpConfig): {
   }
 
   if (config.type === 'stdio') {
-    // Resolve 'node' to process.execPath so spawn works when PATH is minimal (e.g. launchd/systemd)
-    const command =
-      config.command === 'node' || config.command === 'node.exe'
-        ? process.execPath
-        : config.command;
+    const command = resolveStdioCommand(config.command);
     const transport = new StdioClientTransport({
       command,
       args: config.args ?? [],
