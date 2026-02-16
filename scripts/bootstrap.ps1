@@ -17,7 +17,8 @@ if (Test-Path $Dest) {
     Write-Host "Directory exists. Updating..."
     Push-Location $Dest
     try {
-        git pull --depth 1 2>$null
+        git fetch --depth 1 origin
+        git reset --hard origin/main
     } catch {
         Write-Host "Git update completed (any warnings above can be ignored)" -ForegroundColor Yellow
     }
