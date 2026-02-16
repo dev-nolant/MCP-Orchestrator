@@ -14,25 +14,6 @@
 
 Connect MCPs locally (via URL or stdio) and automate actions between them. Chain tools from different MCPs—e.g. filesystem `search_files` → memory `create_entities`, or your own MCP combos.
 
----
-
-## Orchestrate via MCP
-
-**The MCP Orchestrator exposes itself as an MCP server.** Add it to Cursor, Claude Desktop, or any MCP client and operate the orchestrator entirely from chat—no web UI required.
-
-| What you can do | Tools |
-|-----------------|-------|
-| Run workflows | `run_workflow`, `list_workflows` |
-| Create and edit workflows | `add_workflow`, `update_workflow`, `delete_workflow`, `schedule_workflow`, `unschedule_workflow` |
-| Manage MCP connections | `list_mcps`, `add_mcp`, `remove_mcp`, `enable_mcp`, `disable_mcp` |
-| Test MCPs | `call_tool`, `list_tools`, `get_mcp_status` |
-| Control the tunnel | `start_tunnel`, `stop_tunnel`, `generate_tunnel_token`, `cloudflare_login` |
-| Install MCPs | `search_registry`, `install_from_registry`, `install_npm_mcp` |
-
-**Quick setup:** Add `http://localhost:3847/mcp` (Streamable HTTP) to your MCP client. Read `orchestrator://glossary` first for the full reference.
-
----
-
 ## Table of Contents
 
 - [Setup](#setup)
@@ -41,9 +22,8 @@ Connect MCPs locally (via URL or stdio) and automate actions between them. Chain
 - [Easy Install (Mac, Linux, Windows)](#easy-install-mac-linux-windows)
 - [Uninstall](#uninstall)
 - [Web UI](#web-ui)
-- [Orchestrate via MCP](#orchestrate-via-mcp) — Run and manage everything from an MCP interface like Claude/Cursor
 - [CLI](#cli)
-- [MCP Tools & Resources (full reference)](#use-as-an-mcp-cursor--claude-desktop)
+- [Use as an MCP (Cursor / Claude Desktop)](#use-as-an-mcp-cursor--claude-desktop)
 - [Public URL (Tunnel)](#public-url-tunnel)
 - [Prerequisites](#prerequisites)
 
