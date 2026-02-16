@@ -23,7 +23,7 @@ Connect MCPs locally (via URL or stdio) and automate actions between them. Chain
 - [Uninstall](#uninstall)
 - [Web UI](#web-ui)
 - [CLI](#cli)
-- [Use as an MCP (Cursor / Claude Desktop)](#use-as-an-mcp-cursor--claude-desktop)
+- [Use as an MCP](#use-as-an-mcp)
 - [Public URL (Tunnel)](#public-url-tunnel)
 - [Prerequisites](#prerequisites)
 
@@ -261,9 +261,9 @@ To sync Spotify → Pieces automatically every 30 minutes:
 */30 * * * * cd /path/to/mcp-orchestrator && npm run workflow -- "Spotify to Pieces"
 ```
 
-## Use as an MCP (Cursor / Claude Desktop)
+## Use as an MCP
 
-The MCP Orchestrator is a first-class MCP server. When you add it to Cursor or Claude Desktop, the AI gets tools to list workflows, run them, add or remove MCPs, test connections, control the tunnel, and install new MCPs from the registry—all without opening the web UI.
+The MCP Orchestrator is a first-class MCP server. Add it to any MCP client (Cursor, Claude Desktop, Windsurf, Continue, MCP Inspector, or custom apps) and operate workflows, MCPs, the tunnel, and installs—all from chat, no web UI required.
 
 ### Resources (read these for context)
 - `orchestrator://glossary` — Read first: reference for every tool, args, usage, examples (customize via `docs/glossary.md`)
@@ -283,19 +283,13 @@ The MCP Orchestrator is a first-class MCP server. When you add it to Cursor or C
 
 Use `call_tool` to test an MCP connection (e.g. `call_tool(mcp: "spotify", tool: "getNowPlaying")`).
 
-### Add to Cursor
+### Setup
 
-1. Open **Settings → MCP**.
-2. Add a server with **Streamable HTTP** and this URL:
-   ```
-   http://localhost:3847/mcp
-   ```
-   If using mcporch.local: `http://mcporch.local:3847/mcp`
-3. Restart Cursor.
+Add the orchestrator as a **Streamable HTTP** MCP with URL `http://localhost:3847/mcp` (or `http://mcporch.local:3847/mcp` if using the hosts entry).
 
-### Add to Claude Desktop
+**Cursor:** Settings → MCP → Add server with the URL above, then restart.
 
-In `claude_desktop_config.json`:
+**Claude Desktop:** In `claude_desktop_config.json`:
 
 ```json
 {
@@ -307,7 +301,7 @@ In `claude_desktop_config.json`:
 }
 ```
 
-Ensure the MCP Orchestrator server is running (`npm run ui` or via the install scripts) before using the tools.
+Ensure the MCP Orchestrator server is running (`npm run ui` or via the install scripts) before connecting.
 
 ## Public URL (Tunnel)
 
@@ -334,14 +328,11 @@ Alternatively, use token-based named tunnel: set `CLOUDFLARE_TUNNEL_TOKEN` and `
 
 **URL MCPs** are tunneled via the orchestrator; **stdio MCPs** use an HTTP-to-stdio bridge. All traffic is proxied and validated with per-MCP tokens. Without the token, access is denied.
 
-**Claude Desktop** example:
-
+**Example (any MCP client):**
 ```
 URL: https://your-tunnel.trycloudflare.com/tunnel/pieces
 Authorization: Bearer <your-token>
 ```
-
-**Cursor** — Add the Streamable HTTP MCP URL and ensure the Bearer token is sent.
 
 **Security:**
 - MCP tokens in `mcp-orchestrator.secrets.json`. Use **Revoke** to invalidate.
