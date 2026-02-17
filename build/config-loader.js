@@ -1,5 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import { invalidateProxyToolsCache } from './proxy-tools-cache.js';
 const CONFIG_PATH = path.join(process.cwd(), 'mcp-orchestrator.config.json');
 export function loadConfig() {
     if (!fs.existsSync(CONFIG_PATH)) {
@@ -9,4 +10,5 @@ export function loadConfig() {
 }
 export function saveConfig(config) {
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf8');
+    invalidateProxyToolsCache();
 }

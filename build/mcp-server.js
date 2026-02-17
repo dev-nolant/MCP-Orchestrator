@@ -15,6 +15,7 @@ import { toTunnelSubdomain } from './config.js';
 import { startOrchestratorTunnel, stopOrchestratorTunnel, getOrchestratorTunnelUrl, getOrchestratorTunnelPersisted, isCloudflareTunnelActive, isNamedTunnelConfigured, isCloudflareLoggedIn, runCloudflareLogin, getTunnelBaseDomain, } from './tunnel.js';
 import { setSecret } from './secrets.js';
 import { getTunnelTokenMcpNames, setTunnelToken, deleteTunnelToken, generateTunnelToken, } from './tunnel-tokens.js';
+import { registerProxiedTools } from './mcp-proxy-tools.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REGISTRY_BASE = 'https://prod.registry.modelcontextprotocol.io';
 const sessions = new Map();
@@ -24,7 +25,7 @@ const WorkflowStepSchema = z.object({
     args: z.record(z.string(), z.unknown()).optional(),
     mapOutputFrom: z.number().optional(),
 });
-function createMcpServer() {
+async function createMcpServer() {
     const server = new McpServer({
         name: 'mcp-orchestrator',
         version: '0.1.0',
@@ -338,7 +339,7 @@ function createMcpServer() {
     });
     server.registerTool('call_tool', {
         title: 'Call Tool',
-        description: 'Call a single tool on an MCP. Use to test connections.',
+        description: 'Call a tool on an MCP by name. Use when the proxied tool (mcpName__toolName) is not available or you need to specify mcp/tool explicitly.',
         inputSchema: {
             mcp: z.string(),
             tool: z.string(),
@@ -634,6 +635,8 @@ function createMcpServer() {
     });
     // --- Phase 6+7: Resources ---
     registerResources(server);
+    // --- Proxied MCP tools: expose each MCP's tools as mcpName__toolName for direct use ---
+    await registerProxiedTools(server);
     return server;
 }
 function registerResources(server) {
@@ -779,7 +782,7 @@ export async function handleMcpRequest(req, res, parsedBody) {
             transport = sessions.get(sessionId).transport;
         }
         else if (!sessionId && parsedBody && isInitializeRequest(parsedBody)) {
-            const server = createMcpServer();
+            const server = await createMcpServer();
             transport = new StreamableHTTPServerTransport({
                 sessionIdGenerator: () => randomUUID(),
                 onsessioninitialized: (sid) => {
