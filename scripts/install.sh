@@ -31,7 +31,6 @@ echo ""
 echo "  Created and maintained by Nolan Taft — https://github.com/dev-nolant/MCP-Orchestrator"
 echo ""
 
-# Check Node.js
 if ! command -v node &>/dev/null; then
   echo "Error: Node.js is required. Install from https://nodejs.org"
   exit 1
@@ -43,7 +42,6 @@ if [ "$NODE_VER" -lt 18 ] 2>/dev/null; then
   exit 1
 fi
 
-# Add mcporch.local to hosts if missing
 add_hosts() {
   if grep -qE "127\.0\.0\.1[[:space:]]+${HOSTNAME}" /etc/hosts 2>/dev/null; then
     echo "  ✓ $HOSTNAME already in /etc/hosts"
@@ -59,7 +57,6 @@ add_hosts() {
   fi
 }
 
-# uv install (for Python MCPs from Discover)
 install_uv() {
   if command -v uv &>/dev/null; then
     echo "  ✓ uv already installed ($(uv --version 2>/dev/null | head -1 || echo 'uv'))"
@@ -82,7 +79,6 @@ install_uv() {
   fi
 }
 
-# Cloudflared install (for Public URLs / tunnels)
 install_cloudflared() {
   if command -v cloudflared &>/dev/null; then
     echo "  ✓ cloudflared already installed ($(cloudflared --version 2>/dev/null | head -1 || echo 'cloudflared'))"
@@ -150,7 +146,6 @@ if [ "$INSTALL_UV" = "yes" ]; then
   install_uv
 fi
 
-# Copy example config if none exists
 CONFIG="$ORCH_DIR/mcp-orchestrator.config.json"
 EXAMPLE="$ORCH_DIR/mcp-orchestrator.config.example.json"
 if [ ! -f "$CONFIG" ] && [ -f "$EXAMPLE" ]; then
@@ -158,7 +153,6 @@ if [ ! -f "$CONFIG" ] && [ -f "$EXAMPLE" ]; then
   echo "  ✓ Created mcp-orchestrator.config.json from example"
 fi
 
-# Encrypted secrets setup (stores key in OS keychain, no plain-text file)
 setup_encrypted_secrets() {
   if [ -z "$INSTALL_SECRETS" ]; then
     if [ -t 0 ] && [ -e /dev/tty ]; then
@@ -187,21 +181,18 @@ setup_encrypted_secrets() {
   return 0
 }
 
-setup_encrypted_secrets
-
-# Install deps and build
 echo ""
 echo "Installing dependencies..."
 cd "$ORCH_DIR"
 npm install
 npm run build
 
-# Add hosts entry
+setup_encrypted_secrets
+
 echo ""
 echo "Configuring $HOSTNAME..."
 add_hosts
 
-# Stop existing server if running
 if [ -f "$PID_FILE" ]; then
   OLD_PID=$(cat "$PID_FILE")
   if kill -0 "$OLD_PID" 2>/dev/null; then
@@ -213,14 +204,12 @@ if [ -f "$PID_FILE" ]; then
   rm -f "$PID_FILE"
 fi
 
-# Unload launchd/systemd if present (we'll re-install)
 if [ "$(uname)" = "Darwin" ] && [ -f "$HOME/Library/LaunchAgents/com.mcp-orchestrator.server.plist" ]; then
   launchctl bootout "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.mcp-orchestrator.server.plist" 2>/dev/null || true
 elif [ -f "$HOME/.config/systemd/user/mcp-orchestrator.service" ]; then
   systemctl --user stop mcp-orchestrator.service 2>/dev/null || true
 fi
 
-# Start server in background (keychain is read automatically at startup)
 echo ""
 echo "Starting MCP Orchestrator in background..."
 cd "$ORCH_DIR"
