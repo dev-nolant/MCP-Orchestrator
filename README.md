@@ -12,7 +12,7 @@
 [![Share on X](https://img.shields.io/badge/share-000000?logo=x&logoColor=white)](https://x.com/intent/tweet?text=Check%20out%20MCP%20Orchestrator%20%E2%80%94%20connect%20and%20chain%20MCPs%20locally%20https://github.com/dev-nolant/MCP-Orchestrator%20%23MCP%20%23AI)
 [![Share on LinkedIn](https://img.shields.io/badge/share-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/sharing/share-offsite/?url=https://github.com/dev-nolant/MCP-Orchestrator)
 
-Connect MCPs locally (via URL or stdio) and automate actions between them. Chain tools from different MCPs—e.g. filesystem `search_files` → memory `create_entities`, or your own MCP combos.
+Your MCPs don't talk to each other. MCP Orchestrator discovers and installs MCPs from npm and PyPI, connects them by URL or stdio, chains their tools in workflows, tunnels any MCP to the internet (quick or named, per-MCP tokens), and lets your favorite LLM add MCPs, build workflows, manage the tunnel, and run it all from chat. Web UI, Easy Install for Cursor, Claude, Windsurf, and Continue, CLI, one-command bootstrap with auto-start.
 
 ## Table of Contents
 
