@@ -38,6 +38,7 @@
         <button class="tab" data-tab="schedule">Schedule</button>
         <button class="tab" data-tab="run">Run</button>
         <button class="tab" data-tab="tunnel">Public URLs</button>
+        <button class="tab" data-tab="connect">Connect</button>
       </nav>
     </header>
 
@@ -138,6 +139,43 @@
         <h3 class="tunnel-mcps-heading">MCPs</h3>
         <p class="tunnel-subhint">Generate a token for each MCP to share with remote clients. Each token is scoped to that MCP only.</p>
         <div id="tunnel-mcps-list" class="tunnel-mcps-list"></div>
+      </section>
+
+      <section id="panel-connect" class="panel">
+        <div class="panel-header">
+          <h2>Connect MCP Orchestrator</h2>
+        </div>
+        <p class="connect-intro">Add MCP Orchestrator to your AI client (Cursor, Claude Desktop, Windsurf, or Continue). Select your platform and client, then copy the config or use <strong>Easy Install</strong> to write it into your config file automatically.</p>
+        <div class="connect-form">
+          <div class="form-row">
+            <label for="connect-platform">Platform</label>
+            <select id="connect-platform" class="connect-select">
+              <option value="mac">macOS</option>
+              <option value="windows">Windows</option>
+              <option value="linux">Linux</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label for="connect-client">Client</label>
+            <select id="connect-client" class="connect-select">
+              <option value="cursor">Cursor</option>
+              <option value="claude-desktop">Claude Desktop</option>
+              <option value="windsurf">Windsurf</option>
+              <option value="continue">Continue</option>
+            </select>
+          </div>
+          <div class="connect-actions">
+            <button type="button" class="btn btn-primary" id="connect-install-btn">Easy Install</button>
+            <button type="button" class="btn btn-ghost" id="connect-copy-btn">Copy config</button>
+          </div>
+        </div>
+        <div id="connect-status" class="connect-status hidden"></div>
+        <h3 class="connect-config-label">Config preview</h3>
+        <pre id="connect-config-preview" class="connect-config-preview"></pre>
+        <details class="connect-guide" open>
+          <summary>Setup guides by platform & client</summary>
+          <div id="connect-guide-content" class="connect-guide-content"></div>
+        </details>
       </section>
 
       <section id="panel-settings" class="panel">

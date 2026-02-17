@@ -99,6 +99,7 @@ function createMcpServer() {
             };
         }
     });
+    // --- Phase 1: Workflow Management ---
     server.registerTool('get_workflow', {
         title: 'Get Workflow',
         description: 'Get full workflow details by name.',
@@ -208,6 +209,7 @@ function createMcpServer() {
         appendLog({ type: 'config', message: `Unscheduled workflow "${name}"`, detail: null, success: true });
         return { content: [{ type: 'text', text: `Workflow "${name}" is now manual-only.` }] };
     });
+    // --- Phase 2: MCP Connection Management ---
     server.registerTool('list_mcps', {
         title: 'List MCPs',
         description: 'List configured MCPs with enabled status and type.',
@@ -400,6 +402,7 @@ function createMcpServer() {
         }
         return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }] };
     });
+    // --- Phase 3: Tunnel ---
     server.registerTool('get_tunnel_status', {
         title: 'Get Tunnel Status',
         description: 'Return tunnel status: active, URLs, base domain, token MCPs.',
@@ -508,6 +511,7 @@ function createMcpServer() {
         appendLog({ type: 'tunnel', message: `Token revoked for ${mcpName}`, detail: null, success: true });
         return { content: [{ type: 'text', text: `Token revoked for ${mcpName}.` }] };
     });
+    // --- Phase 4: Registry + NPM ---
     server.registerTool('search_registry', {
         title: 'Search Registry',
         description: 'Search the MCP registry for servers.',
@@ -602,6 +606,7 @@ function createMcpServer() {
         appendLog({ type: 'install', message: 'Installed npm package', detail: `${pkgTrim} → ${finalName}`, success: true });
         return { content: [{ type: 'text', text: `Installed: ${finalName}` }] };
     });
+    // --- Phase 5: Config, Logs ---
     server.registerTool('get_config', {
         title: 'Get Config',
         description: 'Return current config (mcps, workflows) as JSON.',
@@ -627,6 +632,7 @@ function createMcpServer() {
         appendLog({ type: 'config', message: 'Logs cleared', detail: null, success: true });
         return { content: [{ type: 'text', text: 'Logs cleared.' }] };
     });
+    // --- Phase 6+7: Resources ---
     registerResources(server);
     return server;
 }

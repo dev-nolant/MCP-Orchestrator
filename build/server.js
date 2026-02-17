@@ -12,6 +12,7 @@ import { getSecret, setSecret, deleteSecret, listSecretKeys } from './secrets.js
 import { setTunnelToken, deleteTunnelToken, generateTunnelToken, getTunnelTokenMcpNames } from './tunnel-tokens.js';
 import { handleTunnelProxy } from './tunnel-proxy.js';
 import { toTunnelSubdomain } from './config.js';
+import { installToClient, getConfigForClient, detectPlatform, } from './mcp-client-install.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 process.on('uncaughtException', (err) => {
     console.error('[tunnel] Uncaught exception:', err);
@@ -622,6 +623,55 @@ async function main() {
         catch (err) {
             res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
         }
+    });
+    app.get('/api/mcp-client/config', (req, res) => {
+        try {
+            const platform = req.query.platform || detectPlatform();
+            const client = req.query.client;
+            if (!client || !['cursor', 'claude-desktop', 'windsurf', 'continue'].includes(client)) {
+                return res.status(400).json({ error: 'Invalid or missing client' });
+            }
+            const cwd = process.cwd();
+            const result = getConfigForClient(platform, client, cwd);
+            if (!result)
+                return res.status(400).json({ error: 'Unknown client' });
+            res.json({
+                config: result.config,
+                path: result.path,
+                configString: JSON.stringify(result.config, null, 2),
+            });
+        }
+        catch (err) {
+            res.status(500).json({ error: String(err) });
+        }
+    });
+    app.post('/api/mcp-client/install', (req, res) => {
+        try {
+            const { platform, client } = req.body;
+            const plat = (platform || detectPlatform());
+            const cli = client;
+            if (!cli || !['cursor', 'claude-desktop', 'windsurf', 'continue'].includes(cli)) {
+                return res.status(400).json({ error: 'Invalid or missing client' });
+            }
+            const cwd = process.cwd();
+            const result = installToClient(plat, cli, cwd);
+            if (!result.success) {
+                return res.status(400).json({ error: result.error || result.message });
+            }
+            appendLog({
+                type: 'install',
+                message: 'MCP client config installed',
+                detail: `${cli} → ${result.path}`,
+                success: true,
+            });
+            res.json({ ok: true, path: result.path, message: result.message });
+        }
+        catch (err) {
+            res.status(500).json({ error: String(err) });
+        }
+    });
+    app.get('/api/mcp-client/platform', (_req, res) => {
+        res.json({ platform: detectPlatform() });
     });
     app.post('/mcp', async (req, res) => {
         const { handleMcpRequest } = await import('./mcp-server.js');

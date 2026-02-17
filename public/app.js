@@ -353,7 +353,7 @@ function hideLogsPanel() {
 const TAB_STORAGE_KEY = 'mcp-orchestrator-tab';
 const MCP_SUB_STORAGE_KEY = 'mcp-orchestrator-mcp-sub';
 const MCP_VIEW_KEY = 'mcp-orchestrator-mcp-view';
-const VALID_TABS = ['mcps', 'workflows', 'schedule', 'run', 'tunnel', 'settings'];
+const VALID_TABS = ['mcps', 'workflows', 'schedule', 'run', 'tunnel', 'connect', 'settings'];
 
 function activateMainTab(tabId) {
   const tab = document.querySelector(`.tab[data-tab="${tabId}"]`);
@@ -367,6 +367,7 @@ function activateMainTab(tabId) {
   if (tabId === 'schedule') renderSchedulePanel();
   if (tabId === 'mcps') checkMcpStatus();
   if (tabId === 'tunnel') renderTunnelPanel();
+  if (tabId === 'connect') renderConnectPanel();
   if (tabId === 'settings') renderSettingsPanel();
 }
 
@@ -1197,6 +1198,139 @@ async function renderTunnelPanel() {
   }
 }
 
+async function renderConnectPanel() {
+  const platformSel = document.getElementById('connect-platform');
+  const clientSel = document.getElementById('connect-client');
+  const previewEl = document.getElementById('connect-config-preview');
+  const statusEl = document.getElementById('connect-status');
+  const guideEl = document.getElementById('connect-guide-content');
+  if (!platformSel || !clientSel || !previewEl) return;
+
+  const platform = platformSel.value;
+  const client = clientSel.value;
+
+  try {
+    const data = await api(`/mcp-client/config?platform=${encodeURIComponent(platform)}&client=${encodeURIComponent(client)}`);
+    previewEl.textContent = data.configString || JSON.stringify(data.config, null, 2);
+
+    if (guideEl) {
+      const guides = {
+        cursor: {
+          mac: '~/.cursor/mcp.json',
+          windows: '%USERPROFILE%\\.cursor\\mcp.json',
+          linux: '~/.cursor/mcp.json',
+          steps: ['Open Cursor Settings → Features → MCP', 'Or edit the file directly', 'Restart Cursor after saving'],
+        },
+        'claude-desktop': {
+          mac: '~/Library/Application Support/Claude/claude_desktop_config.json',
+          windows: '%APPDATA%\\Claude\\claude_desktop_config.json',
+          linux: '~/.config/Claude/claude_desktop_config.json',
+          steps: ['Claude Desktop uses stdio only—we use a bridge (npx @pyroprompts/mcp-stdio-to-streamable-http-adapter)', 'Restart Claude Desktop completely after saving', 'Ensure MCP Orchestrator is running before opening Claude'],
+        },
+        windsurf: {
+          mac: '~/.codeium/windsurf/mcp_config.json',
+          windows: '%USERPROFILE%\\.codeium\\windsurf\\mcp_config.json',
+          linux: '~/.codeium/windsurf/mcp_config.json',
+          steps: ['Edit mcp_config.json or use Windsurf MCP settings', 'Restart Windsurf after saving'],
+        },
+        continue: {
+          mac: '~/.continue/config.json',
+          windows: '%USERPROFILE%\\.continue\\config.json',
+          linux: '~/.continue/config.json',
+          steps: ['Edit config.json (or config.yaml on older versions)', 'Restart Continue after saving'],
+        },
+      };
+      const g = guides[client] || guides.cursor;
+      const pathKey = platform;
+      const configPath = g[pathKey] || g.mac;
+      guideEl.innerHTML = `
+        <p><strong>Config path:</strong> <code>${escapeHtml(configPath)}</code></p>
+        <p><strong>Steps:</strong></p>
+        <ul>${(g.steps || []).map((s) => `<li>${escapeHtml(s)}</li>`).join('')}</ul>
+      `;
+    }
+  } catch (err) {
+    previewEl.textContent = 'Failed to load config.';
+    if (statusEl) {
+      statusEl.textContent = err?.message || 'Error';
+      statusEl.classList.remove('hidden', 'connect-status-success');
+      statusEl.classList.add('connect-status-error');
+    }
+  }
+
+  if (statusEl) statusEl.classList.add('hidden');
+}
+
+function initConnectPanel() {
+  const platformSel = document.getElementById('connect-platform');
+  const clientSel = document.getElementById('connect-client');
+  const installBtn = document.getElementById('connect-install-btn');
+  const copyBtn = document.getElementById('connect-copy-btn');
+  const statusEl = document.getElementById('connect-status');
+
+  const refresh = () => renderConnectPanel();
+
+  platformSel?.addEventListener('change', refresh);
+  clientSel?.addEventListener('change', refresh);
+
+  installBtn?.addEventListener('click', async () => {
+    installBtn.disabled = true;
+    if (statusEl) {
+      statusEl.classList.add('hidden');
+      statusEl.textContent = '';
+    }
+    try {
+      const data = await api('/mcp-client/install', {
+        method: 'POST',
+        body: JSON.stringify({
+          platform: platformSel?.value || 'mac',
+          client: clientSel?.value || 'cursor',
+        }),
+      });
+      if (statusEl) {
+        statusEl.textContent = data.message || 'Installed successfully. Restart your client.';
+        statusEl.classList.remove('hidden', 'connect-status-error');
+        statusEl.classList.add('connect-status-success');
+      }
+      await loadLogs();
+    } catch (err) {
+      if (statusEl) {
+        statusEl.textContent = err?.message || err?.error || 'Install failed';
+        statusEl.classList.remove('hidden', 'connect-status-success');
+        statusEl.classList.add('connect-status-error');
+      }
+    } finally {
+      installBtn.disabled = false;
+    }
+  });
+
+  copyBtn?.addEventListener('click', async () => {
+    const preview = document.getElementById('connect-config-preview')?.textContent;
+    if (preview) {
+      try {
+        await navigator.clipboard.writeText(preview);
+        const orig = copyBtn.textContent;
+        copyBtn.textContent = 'Copied!';
+        setTimeout(() => { copyBtn.textContent = orig; }, 1500);
+      } catch {
+        alert('Copy failed');
+      }
+    }
+  });
+
+  (async () => {
+    try {
+      const { platform } = await api('/mcp-client/platform');
+      if (platformSel && platform) {
+        platformSel.value = platform;
+        refresh();
+      }
+    } catch {
+      refresh();
+    }
+  })();
+}
+
 function initTunnelPanel() {
   const startBtn = document.getElementById('tunnel-start-btn');
   const stopBtn = document.getElementById('tunnel-stop-btn');
@@ -1761,13 +1895,15 @@ function showWorkflowModal(existingIndex = null) {
   const container = document.getElementById('steps-container');
   const stepOutputsByBlock = new Map();
 
+  const STEP_PLACEHOLDER = /\{\{step(\d+)(?:\.([^}]+)|:regex:([^}]+)|:regexAll:([^}]+))?\}\}/g;
+
   function getReferencedStepIndices(argsStr) {
     const indices = new Set();
     try {
       const obj = argsStr.trim() ? JSON.parse(argsStr) : {};
       const search = (o) => {
         if (typeof o === 'string') {
-          for (const m of o.matchAll(/\{\{step(\d+)\}\}/g)) indices.add(parseInt(m[1], 10));
+          for (const m of o.matchAll(STEP_PLACEHOLDER)) indices.add(parseInt(m[1], 10));
         } else if (Array.isArray(o)) {
           o.forEach(search);
         } else if (o && typeof o === 'object') {
@@ -1779,10 +1915,63 @@ function showWorkflowModal(existingIndex = null) {
     return indices;
   }
 
-  function substituteStepOutputs(obj, stepOutputs) {
-    if (typeof obj === 'string') {
-      return obj.replace(/\{\{step(\d+)\}\}/g, (_, i) => stepOutputs[parseInt(i, 10)] ?? '');
+  function getByPath(obj, path) {
+    const parts = path.trim().split('.');
+    let cur = obj;
+    for (const p of parts) {
+      if (cur == null || typeof cur !== 'object') return undefined;
+      cur = cur[p];
     }
+    return cur;
+  }
+
+  function resolvePlaceholder(stepIndex, path, regexPat, regexAllPat, stepOutputs) {
+    const raw = stepOutputs[stepIndex] ?? '';
+    if (path !== undefined) {
+      try {
+        const data = JSON.parse(raw);
+        const val = getByPath(data, path);
+        return val !== undefined ? val : '';
+      } catch {
+        return '';
+      }
+    }
+    if (regexPat !== undefined) {
+      const pattern = regexPat.replace(/:array$/, '').trim();
+      const m = new RegExp(pattern).exec(raw);
+      const val = m?.[1] ?? '';
+      return regexPat.endsWith(':array') ? (val ? [val] : []) : val;
+    }
+    if (regexAllPat !== undefined) {
+      const pattern = regexAllPat.replace(/:array$/, '').trim();
+      const re = new RegExp(pattern, 'g');
+      const matches = [...raw.matchAll(re)];
+      return matches.map((m) => m[1]).filter((s) => s !== undefined);
+    }
+    return raw;
+  }
+
+  function substituteInString(str, stepOutputs) {
+    const matches = [...str.matchAll(new RegExp(STEP_PLACEHOLDER.source, 'g'))];
+    if (matches.length === 0) return str;
+    const singleMatch = matches.length === 1 && matches[0] && str.trim() === matches[0][0];
+    if (singleMatch) {
+      const m = matches[0];
+      const idx = parseInt(m[1], 10);
+      return resolvePlaceholder(idx, m[2], m[3], m[4], stepOutputs);
+    }
+    let result = str;
+    for (const m of matches) {
+      const idx = parseInt(m[1], 10);
+      const resolved = resolvePlaceholder(idx, m[2], m[3], m[4], stepOutputs);
+      const repl = typeof resolved === 'object' ? JSON.stringify(resolved) : String(resolved);
+      result = result.replace(m[0], repl);
+    }
+    return result;
+  }
+
+  function substituteStepOutputs(obj, stepOutputs) {
+    if (typeof obj === 'string') return substituteInString(obj, stepOutputs);
     if (Array.isArray(obj)) return obj.map((item) => substituteStepOutputs(item, stepOutputs));
     if (obj && typeof obj === 'object') {
       const r = {};
@@ -2482,6 +2671,7 @@ async function init() {
   initMcpSubTabs();
   initMcpWiki();
   initTunnelPanel();
+  initConnectPanel();
   initSettingsPanel();
 
   try {
