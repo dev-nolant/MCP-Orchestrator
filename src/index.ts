@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { OrchestratorConfig } from './config.js';
 import { listAllTools, runWorkflow } from './workflow.js';
+import { bootstrapSecretsFromKeychain } from './secrets.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -20,6 +21,7 @@ function loadConfig(configPath?: string): OrchestratorConfig {
 }
 
 async function main(): Promise<void> {
+  bootstrapSecretsFromKeychain();
   const [cmd, ...rest] = process.argv.slice(2);
   const configPath = rest.find((a) => a.startsWith('--config='))?.slice(9);
   const config = loadConfig(configPath);

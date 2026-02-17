@@ -85,7 +85,29 @@ Supported formats:
 - `secret:key` — read from `mcp-orchestrator.secrets.json` (stored locally, gitignored)
 - Plain string — avoid in committed config
 
-Store a token via API: `PUT /api/secrets/:key` with `{ "value": "your-token" }`. Restrict file permissions: `chmod 600 mcp-orchestrator.secrets.json`.
+Store a token via API: `PUT /api/secrets/:key` with `{ "value": "your-token" }`.
+
+### Encrypted secrets (recommended)
+
+When a master key is available, secrets are stored **encrypted** (AES-256-GCM) in `mcp-orchestrator.secrets.json`. The key is stored in the **OS keychain** (macOS Keychain, Windows Credential Manager, Linux Secret Service)—no plain-text key file.
+
+**Install script** prompts for a password and stores the derived key in the OS keychain. No files with secrets.
+
+**Manual setup:** run `npm run setup-encryption` and enter a password (min 8 chars). Or use the Settings UI: enter a password and click "Set up encryption". Existing secrets are re-encrypted immediately.
+
+**Override:** set `MCP_ORCHESTRATOR_MASTER_KEY` (base64 32-byte key or passphrase) in your environment to use a different key than keychain.
+
+**Without master key:** falls back to legacy plain JSON. Restrict permissions: `chmod 600 mcp-orchestrator.secrets.json`.
+
+### Tool routing: gateway vs full
+
+**Default: `proxyMode: "gateway"`** — One route per MCP instead of per tool. Keeps tool count low (3 MCPs → 3 gateway tools + native orchestrator tools).
+
+- Call `spotify__call(tool="getNowPlaying", args={})` or `P__call(tool="create_pieces_memory", args={})`
+- Use `list_tools(mcp="spotify")` to discover available tools
+- Workflows unchanged — they use `mcp` + `tool` in steps
+
+**Legacy: `proxyMode: "full"`** — Every MCP tool as its own proxy (`spotify__getNowPlaying`, `Pieces__create_pieces_memory`, etc.). Full ergonomics but can exceed 80-tool limits with many MCPs. Use `proxyPrefix`, `toolsInclude`, or `toolsExclude` per MCP to trim.
 
 ## Workflows
 
@@ -94,10 +116,16 @@ Workflows chain steps. Use placeholders to inject previous step output into the 
 | Placeholder | Use case |
 |-------------|----------|
 | `{{step0}}` | Full text output of step 0 |
-| `{{step1.id}}` | JSON path – when the step returns valid JSON, extract `id` (or nested `data.items.0.id`) |
-| `{{step1:regex:Playlist ID: (\w+)}}` | Regex – single capture group from text |
-| `{{step0:regexAll:ID: (\w+)}}` | Regex all – all capture groups as **array** (e.g. track IDs from lines) |
-| `{{step0:regexAll:ID: (\w+):array}}` | Same; optional `:array` suffix is stripped from the pattern (use for clarity) |
+| `{{step1.id}}` | JSON path – when the step returns valid JSON, extract `id` |
+| `{{step1:regex:Playlist ID: (\w+)}}` | Regex – single capture group |
+| `{{step0:regexAll:ID: (\w+)}}` | Regex all – all captures as **array** |
+| `{{now}}` | Current time in ISO format |
+| `{{isoDate}}` | Today's date (YYYY-MM-DD) |
+| `{{date}}` | Local date string |
+| `{{timestamp}}` | Unix milliseconds |
+| `{{uuid}}` | Random UUID |
+| `{{year}}`, `{{month}}`, `{{day}}`, `{{weekday}}` | Date parts |
+| `{{js: new Date().toLocaleDateString('en-US', {month:'long'}) }}` | Arbitrary JavaScript expression |
 
 Example: Spotify → Pieces
 
@@ -182,6 +210,18 @@ Then open **http://mcporch.local:3847**
 .\scripts\install.ps1 -NoCloudflared  # Skip
 ```
 
+**uv** (for Python MCPs from Discover, e.g. fast-mcp-telegram): The installer prompts to install uv. To skip the prompt:
+
+```bash
+./scripts/install.sh --uv     # Install uv
+./scripts/install.sh --no-uv  # Skip (default when non-interactive)
+```
+
+```powershell
+.\scripts\install.ps1 -Uv     # Install uv
+.\scripts\install.ps1 -NoUv   # Skip
+```
+
 **Control scripts:**
 - `./scripts/start.sh` / `.\scripts\start.ps1` — start server in background
 - `./scripts/stop.sh` / `.\scripts\stop.ps1` — stop server
@@ -250,7 +290,7 @@ The UI lets you:
 
 - **Add MCPs** by URL (e.g. `http://localhost:39300/.../mcp`) or by file/stdio (command, args, cwd)
 - **Connect** — Add MCP Orchestrator to Cursor, Claude Desktop, Windsurf, or Continue via Easy Install 
-- **Build workflows** by chaining actions from your MCPs; use `{{step0}}`, `{{step1}}` in args to pass output between steps
+- **Build workflows** by chaining actions from your MCPs; use `{{step0}}`, `{{step1}}`, `{{now}}`, `{{isoDate}}`, etc. in args
 - **Schedule workflows** to run automatically (cron) via the Schedule tab
 - **Run workflows** and view output
 
@@ -300,6 +340,7 @@ The MCP Orchestrator is a first-class MCP server. Add it to any MCP client (Curs
 
 ### Resources (read these for context)
 - `orchestrator://glossary` — Read first: reference for every tool, args, usage, examples (customize via `docs/glossary.md`)
+- `orchestrator://workflow-guide` — Instruction set for creating workflows: manual run, output inspection, placeholders (see `docs/creating-workflows.md`)
 - `orchestrator://config` — Full config (mcps, workflows)
 - `orchestrator://status` — MCP health + tunnel status
 - `orchestrator://logs` — Recent logs

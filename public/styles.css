@@ -847,6 +847,45 @@ body {
   border-color: #363d48;
 }
 
+.btn-store-secret,
+.btn-store-secret-mcp {
+  flex-shrink: 0;
+  white-space: nowrap;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btn-store-secret:hover,
+.btn-store-secret-mcp:hover {
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--accent-dim);
+  border-color: var(--accent-dim);
+}
+
+.btn-store-secret.stored,
+.btn-store-secret-mcp.stored {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: var(--success);
+  color: var(--success);
+  cursor: default;
+}
+
+.btn-store-secret.stored:hover,
+.btn-store-secret-mcp.stored:hover {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--success);
+  border-color: var(--success);
+}
+
+.modal-actions .btn-primary {
+  font-weight: 600;
+}
+
+.modal-actions .btn-primary:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .btn-danger {
   background: transparent;
   color: var(--error);
@@ -1280,6 +1319,7 @@ body {
   border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--text);
+  color: var(--text);
   font-family: inherit;
   font-size: 0.9rem;
   overflow-wrap: break-word;
@@ -1291,6 +1331,12 @@ body {
   font-size: 0.85rem;
   resize: vertical;
   min-height: 80px;
+}
+
+.form-row input::placeholder,
+.form-row textarea::placeholder {
+  color: var(--text-muted);
+  opacity: 0.8;
 }
 
 .form-row-hint {
@@ -1463,6 +1509,26 @@ body {
 }
 
 /* Run section */
+.run-input-details {
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+}
+.run-input-details summary {
+  cursor: pointer;
+  color: var(--text-muted);
+}
+.run-input {
+  margin-top: 0.5rem;
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  resize: vertical;
+}
+
 .run-list {
   display: flex;
   flex-direction: column;
@@ -2184,6 +2250,18 @@ body {
   word-break: break-word;
 }
 
+.modal input,
+.modal select,
+.modal textarea {
+  color: var(--text);
+}
+
+.modal input::placeholder,
+.modal textarea::placeholder {
+  color: var(--text-muted);
+  opacity: 0.8;
+}
+
 .modal h3 {
   margin: 0 0 1.25rem 0;
   font-size: 1.15rem;
@@ -2218,6 +2296,7 @@ body {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  color: var(--text);
 }
 
 .token-modal-url {
@@ -2228,6 +2307,75 @@ body {
 .token-modal-url code {
   font-family: var(--font-mono);
   word-break: break-all;
+}
+
+.auth-modal-intro {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  margin: 0 0 1rem 0;
+}
+
+.auth-modal-docs {
+  margin: 0 0 1rem 0;
+  font-size: 0.9rem;
+}
+
+.auth-modal-docs a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.auth-modal-docs a:hover {
+  text-decoration: underline;
+}
+
+.auth-modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.auth-modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.auth-modal-field label {
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.auth-modal-desc {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.auth-modal-input-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.auth-modal-input-row input {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+}
+
+.auth-modal-input-row input::placeholder {
+  color: var(--text-muted);
+}
+
+.env-required {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 400;
 }
 
 .loading {

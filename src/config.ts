@@ -8,7 +8,20 @@ export function toTunnelSubdomain(name: string, config?: TunnelSubdomainConfig):
   return raw.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-') || 'mcp';
 }
 
-export interface McpConfigUrl {
+/** Shared options for tool proxying (apply to both url and stdio). */
+export interface McpProxyOptions {
+  /**
+   * Short prefix for proxied tool names (e.g. "P" for Pieces).
+   * Keeps combined "server:tool" under 60 chars for Cursor. Default: MCP name.
+   */
+  proxyPrefix?: string;
+  /** Only expose these tools. Omit to expose all (except toolsExclude). */
+  toolsInclude?: string[];
+  /** Exclude these tools from proxying. Use to trim tool count or noisy MCPs. */
+  toolsExclude?: string[];
+}
+
+export interface McpConfigUrl extends McpProxyOptions {
   type: 'url';
   url: string;
   /** Override subdomain for tunnel URL (e.g. "music" → music.example.com). Default: MCP name. */
@@ -28,7 +41,7 @@ export interface McpConfigUrl {
   startOnStartup?: boolean;
 }
 
-export interface McpConfigStdio {
+export interface McpConfigStdio extends McpProxyOptions {
   type: 'stdio';
   command: string;
   /** Override subdomain for tunnel URL (e.g. "music" → music.example.com). Default: MCP name. */
@@ -48,7 +61,7 @@ export interface WorkflowStep {
   mcp: string;
   tool: string;
   args?: Record<string, unknown>;
-  /** Template: {{step0}} = output of step 0, {{step1}} = step 1, etc. */
+  /** Template: {{step0}}, {{step1.id}}, {{step1:regex:pat}}, {{now}}, {{isoDate}}, {{js: expr }}, etc. */
   mapOutputFrom?: number;
 }
 
@@ -62,7 +75,16 @@ export interface Workflow {
   steps: WorkflowStep[];
 }
 
+/**
+ * How to expose MCP tools to clients:
+ * - "gateway" (default): One route per MCP (e.g. spotify__call, pieces__call). Pass tool + args. Keeps total tools low.
+ * - "full": Every MCP tool as its own proxy (spotify__getNowPlaying, etc.). Full ergonomics but can exceed limits.
+ */
+export type ProxyMode = 'gateway' | 'full';
+
 export interface OrchestratorConfig {
   mcps: Record<string, McpConfig>;
   workflows: Workflow[];
+  /** How to expose MCP tools. Default "gateway" to avoid exceeding 80-tool limits. */
+  proxyMode?: ProxyMode;
 }

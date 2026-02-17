@@ -1,110 +1,57 @@
 import type { OrchestratorConfig, Workflow, WorkflowStep } from './config.js';
 import { ensureArgsObject } from './args-wrappers.js';
 import { createMcpClient, extractTextContent } from './connector.js';
+import { substituteTemplatesDeep } from './template-engine.js';
 
-// Matches: {{stepN}}, {{stepN.path}}, {{stepN:regex:pat}}, {{stepN:regexAll:pat}}
-const STEP_PLACEHOLDER =
-  /\{\{step(\d+)(?:\.([^}]+)|:regex:([^}]+)|:regexAll:([^}]+))?\}\}/g;
-
+/** Resolves nested paths like "playlists[1].id" or "foo.bar[0].name". */
 function getByPath(obj: unknown, path: string): unknown {
-  const parts = path.trim().split('.');
+  const pathStr = path.trim();
+  if (!pathStr) return obj;
+  const parts: (string | number)[] = [];
+  let rest = pathStr;
+  while (rest) {
+    rest = rest.replace(/^\./, '');
+    if (!rest) break;
+    const bracketIdx = rest.indexOf('[');
+    const dotIdx = rest.indexOf('.');
+    if (bracketIdx >= 0 && (dotIdx < 0 || bracketIdx < dotIdx)) {
+      if (bracketIdx > 0) {
+        parts.push(rest.slice(0, bracketIdx));
+      }
+      const closeIdx = rest.indexOf(']', bracketIdx);
+      if (closeIdx < 0) return undefined;
+      const indexStr = rest.slice(bracketIdx + 1, closeIdx).trim();
+      const num = /^\d+$/.test(indexStr) ? parseInt(indexStr, 10) : NaN;
+      parts.push(isNaN(num) ? indexStr.replace(/^["']|["']$/g, '') : num);
+      rest = rest.slice(closeIdx + 1);
+    } else if (dotIdx >= 0) {
+      parts.push(rest.slice(0, dotIdx));
+      rest = rest.slice(dotIdx);
+    } else {
+      parts.push(rest);
+      rest = '';
+    }
+  }
   let cur: unknown = obj;
   for (const p of parts) {
     if (cur == null || typeof cur !== 'object') return undefined;
-    cur = (cur as Record<string, unknown>)[p];
+    cur = typeof p === 'number' ? (cur as unknown[])[p] : (cur as Record<string, unknown>)[p];
   }
   return cur;
-}
-
-function resolvePlaceholder(
-  stepIndex: number,
-  path: string | undefined,
-  regexPat: string | undefined,
-  regexAllPat: string | undefined,
-  stepOutputs: string[],
-): unknown {
-  const raw = stepOutputs[stepIndex] ?? '';
-
-  if (path !== undefined) {
-    try {
-      const data = JSON.parse(raw) as unknown;
-      const val = getByPath(data, path);
-      return val !== undefined ? val : '';
-    } catch {
-      return '';
-    }
-  }
-
-  if (regexPat !== undefined) {
-    const pattern = regexPat.replace(/:array$/, '').trim();
-    const m = new RegExp(pattern).exec(raw);
-    const val = m?.[1] ?? '';
-    return regexPat.endsWith(':array') ? (val ? [val] : []) : val;
-  }
-
-  if (regexAllPat !== undefined) {
-    const pattern = regexAllPat.replace(/:array$/, '').trim();
-    const re = new RegExp(pattern, 'g');
-    const matches = [...raw.matchAll(re)];
-    return matches.map((m) => m[1]).filter((s): s is string => s !== undefined);
-  }
-
-  return raw;
-}
-
-function substituteInString(str: string, stepOutputs: string[]): unknown {
-  const matches = [...str.matchAll(new RegExp(STEP_PLACEHOLDER.source, 'g'))];
-  if (matches.length === 0) return str;
-
-  const trimmed = str.trim();
-  const singleMatch =
-    matches.length === 1 &&
-    matches[0] &&
-    str.trim() === matches[0][0];
-
-  if (singleMatch) {
-    const m = matches[0];
-    const idx = parseInt(m[1], 10);
-    const resolved = resolvePlaceholder(idx, m[2], m[3], m[4], stepOutputs);
-    return resolved;
-  }
-
-  let result = str;
-  for (const m of matches) {
-    const idx = parseInt(m[1], 10);
-    const resolved = resolvePlaceholder(idx, m[2], m[3], m[4], stepOutputs);
-    const repl =
-      typeof resolved === 'object'
-        ? JSON.stringify(resolved)
-        : String(resolved);
-    result = result.replace(m[0], repl);
-  }
-  return result;
 }
 
 function substituteStepOutputs(
   obj: unknown,
   stepOutputs: string[],
+  input?: Record<string, unknown> | unknown[],
 ): unknown {
-  if (typeof obj === 'string') {
-    return substituteInString(obj, stepOutputs);
-  }
-  if (Array.isArray(obj)) {
-    return obj.map((item) => substituteStepOutputs(item, stepOutputs));
-  }
-  if (obj && typeof obj === 'object') {
-    const result: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(obj)) {
-      result[k] = substituteStepOutputs(v, stepOutputs);
-    }
-    return result;
-  }
-  return obj;
+  return substituteTemplatesDeep(obj, stepOutputs, getByPath, input);
 }
 
 export async function runWorkflow(
   config: OrchestratorConfig,
   workflowName: string,
+  input?: Record<string, unknown> | unknown[],
 ): Promise<{ stepOutputs: string[]; success: boolean }> {
   const workflow = config.workflows.find(
     (w) => w.name === workflowName || w.name.toLowerCase() === workflowName.toLowerCase(),
@@ -141,7 +88,7 @@ export async function runWorkflow(
         clients.set(step.mcp, client);
       }
 
-      const raw = substituteStepOutputs(step.args ?? {}, stepOutputs);
+      const raw = substituteStepOutputs(step.args ?? {}, stepOutputs, input);
       const args = ensureArgsObject(raw);
 
       try {

@@ -89,15 +89,19 @@ async function createMcpServer(): Promise<McpServer> {
     {
       title: 'Run Workflow',
       description:
-        'Execute a workflow by name. Use list_workflows first to see available workflows.',
+        'Execute a workflow by name. Use list_workflows first to see available workflows. Pass input to substitute {{input.key}} placeholders in workflow steps.',
       inputSchema: {
         name: z.string().describe('The exact name of the workflow to run'),
+        input: z
+          .union([z.record(z.string(), z.unknown()), z.array(z.unknown())])
+          .optional()
+          .describe('Input for {{input.key}} placeholders (e.g. { subject: "math" } or ["a","b"] for {{input.0}})'),
       },
     },
-    async ({ name }) => {
+    async ({ name, input }) => {
       const config = loadConfig();
       try {
-        const { stepOutputs, success } = await runWorkflow(config, name);
+        const { stepOutputs, success } = await runWorkflow(config, name, input);
         appendLog({
           type: 'run',
           message: `Workflow "${name}" (via MCP)`,
@@ -142,7 +146,7 @@ async function createMcpServer(): Promise<McpServer> {
     'get_workflow',
     {
       title: 'Get Workflow',
-      description: 'Get full workflow details by name.',
+      description: 'Get full workflow details by name. When fixing or modifying workflows, fetch orchestrator://workflow-guide first for placeholder syntax and troubleshooting.',
       inputSchema: { name: z.string().describe('Workflow name') },
     },
     async ({ name }) => {
@@ -157,7 +161,7 @@ async function createMcpServer(): Promise<McpServer> {
     'add_workflow',
     {
       title: 'Add Workflow',
-      description: 'Create a new workflow.',
+      description: 'Create a new workflow. Before creating, fetch orchestrator://workflow-guide for placeholders, output inspection, and common pitfalls.',
       inputSchema: {
         name: z.string(),
         description: z.string().optional(),
@@ -184,7 +188,7 @@ async function createMcpServer(): Promise<McpServer> {
     'update_workflow',
     {
       title: 'Update Workflow',
-      description: 'Update a workflow by name (partial update).',
+      description: 'Update a workflow by name (partial update). Before editing, fetch orchestrator://workflow-guide for placeholder syntax and troubleshooting.',
       inputSchema: {
         name: z.string(),
         description: z.string().optional(),
@@ -667,12 +671,13 @@ async function createMcpServer(): Promise<McpServer> {
     'install_from_registry',
     {
       title: 'Install From Registry',
-      description: 'Install an MCP from the registry. Pass the server object from search_registry.',
+      description: 'Install an MCP from the registry. Pass the server object from search_registry. For MCPs that need env vars (e.g. API_ID, API_HASH), pass env as well.',
       inputSchema: {
         server: z.record(z.string(), z.unknown()).describe('Server object from registry (or { server: {...} })'),
+        env: z.record(z.string(), z.string()).optional().describe('Optional env vars, e.g. { API_ID: "123", API_HASH: "secret:key" }'),
       },
     },
-    async ({ server: serverArg }) => {
+    async ({ server: serverArg, env: envOverrides }) => {
       const serverDetail = (serverArg && typeof serverArg === 'object' && 'server' in serverArg
         ? (serverArg as { server?: unknown }).server
         : serverArg) as {
@@ -694,11 +699,16 @@ async function createMcpServer(): Promise<McpServer> {
       }
       const displayName = serverDetail.title || serverDetail.name.split('/').pop() || serverDetail.name;
       const config = loadConfig();
+
+      const toFinalName = (base: string) => {
+        const name = base.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-_]/g, '');
+        return Object.keys(config.mcps).includes(name) ? `${name}-${Date.now()}` : name;
+      };
+
       if (serverDetail.remotes?.length) {
         const remote = serverDetail.remotes[0];
         if (remote.type === 'streamable-http' || remote.type === 'sse') {
-          const name = displayName.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-_]/g, '');
-          const finalName = Object.keys(config.mcps).includes(name) ? `${name}-${Date.now()}` : name;
+          const finalName = toFinalName(displayName);
           config.mcps[finalName] = { type: 'url', url: remote.url, enabled: true };
           saveConfig(config);
           appendLog({ type: 'install', message: 'Installed from registry', detail: `${displayName} → ${finalName}`, success: true });
@@ -706,18 +716,49 @@ async function createMcpServer(): Promise<McpServer> {
         }
       }
       if (serverDetail.packages?.length) {
-        const pkg = serverDetail.packages.find((p) => p.registryType === 'npm' && p.transport?.type === 'stdio') ?? serverDetail.packages[0];
-        if (pkg.registryType === 'npm' && pkg.transport?.type === 'stdio') {
-          const ver = pkg.version && pkg.version !== 'latest' ? `@${pkg.version}` : '';
-          const id = pkg.identifier + ver;
-          const hint = pkg.runtimeHint || 'npx';
-          const runtimeArgs = Array.isArray(pkg.runtimeArguments) ? pkg.runtimeArguments.map((a) => String(typeof a === 'object' && a && 'value' in a ? (a as { value: string }).value : a)) : ['-y'];
-          const pkgArgs = Array.isArray((pkg as { packageArguments?: unknown[] }).packageArguments) ? (pkg as { packageArguments: unknown[] }).packageArguments.map((a) => String(typeof a === 'object' && a && 'value' in a ? (a as { value: string }).value : a)) : [];
+        const npmPkg = serverDetail.packages.find((p) => p.registryType === 'npm' && p.transport?.type === 'stdio');
+        const pypiPkg = serverDetail.packages.find((p) => p.registryType === 'pypi' && p.transport?.type === 'stdio');
+
+        if (npmPkg) {
+          const ver = npmPkg.version && npmPkg.version !== 'latest' ? `@${npmPkg.version}` : '';
+          const id = npmPkg.identifier + ver;
+          const hint = npmPkg.runtimeHint || 'npx';
+          const runtimeArgs = Array.isArray(npmPkg.runtimeArguments) ? npmPkg.runtimeArguments.map((a) => String(typeof a === 'object' && a && 'value' in a ? (a as { value: string }).value : a)) : ['-y'];
+          const pkgArgs = Array.isArray((npmPkg as { packageArguments?: unknown[] }).packageArguments) ? (npmPkg as { packageArguments: unknown[] }).packageArguments.map((a) => String(typeof a === 'object' && a && 'value' in a ? (a as { value: string }).value : a)) : [];
           const args = [...runtimeArgs, id, ...pkgArgs].filter(Boolean);
           const command = hint === 'npx' ? 'npx' : hint;
-          const name = displayName.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-_]/g, '');
-          const finalName = Object.keys(config.mcps).includes(name) ? `${name}-${Date.now()}` : name;
-          config.mcps[finalName] = { type: 'stdio', command, args, enabled: true };
+          const finalName = toFinalName(displayName);
+          config.mcps[finalName] = {
+            type: 'stdio',
+            command,
+            args,
+            enabled: true,
+            ...(envOverrides && Object.keys(envOverrides).length ? { env: envOverrides } : {}),
+          };
+          saveConfig(config);
+          appendLog({ type: 'install', message: 'Installed from registry', detail: `${displayName} → ${finalName}`, success: true });
+          return { content: [{ type: 'text' as const, text: `Installed: ${finalName}` }] };
+        }
+
+        if (pypiPkg) {
+          const identifier = pypiPkg.identifier;
+          const ver = pypiPkg.version && pypiPkg.version !== 'latest' ? `==${pypiPkg.version}` : '';
+          const pkgSpec = identifier + ver;
+          const pkgArgs = Array.isArray((pypiPkg as { packageArguments?: unknown[] }).packageArguments)
+            ? (pypiPkg as { packageArguments: unknown[] }).packageArguments.map((a) =>
+                String(typeof a === 'object' && a && 'value' in a ? (a as { value: string }).value : a)
+              )
+            : [];
+          const command = 'uvx';
+          const args = [pkgSpec, ...pkgArgs].filter(Boolean);
+          const finalName = toFinalName(displayName);
+          config.mcps[finalName] = {
+            type: 'stdio',
+            command,
+            args,
+            enabled: true,
+            ...(envOverrides && Object.keys(envOverrides).length ? { env: envOverrides } : {}),
+          };
           saveConfig(config);
           appendLog({ type: 'install', message: 'Installed from registry', detail: `${displayName} → ${finalName}`, success: true });
           return { content: [{ type: 'text' as const, text: `Installed: ${finalName}` }] };
@@ -878,6 +919,23 @@ function registerResources(server: McpServer): void {
     },
     () => Promise.resolve({ contents: [{ uri: 'orchestrator://glossary', mimeType: 'text/markdown', text: glossaryContent }] }),
   );
+
+  const workflowGuidePath = path.join(__dirname, '../docs/creating-workflows.md');
+  const workflowGuideContent = fs.existsSync(workflowGuidePath)
+    ? fs.readFileSync(workflowGuidePath, 'utf8')
+    : 'Workflow guide not found. See docs/creating-workflows.md in the repo.';
+  server.registerResource(
+    'workflow-guide',
+    'orchestrator://workflow-guide',
+    {
+      mimeType: 'text/markdown',
+      description: 'Read this before creating or editing workflows. Covers placeholders (regex vs JSON path), output inspection, and real troubleshooting examples.',
+    },
+    () =>
+      Promise.resolve({
+        contents: [{ uri: 'orchestrator://workflow-guide', mimeType: 'text/markdown', text: workflowGuideContent }],
+      }),
+  );
 }
 
 function getBuiltInGlossary(): string {
@@ -914,7 +972,7 @@ Each MCP's tools are exposed as \`mcpName__toolName\` (e.g. \`spotify__getNowPla
 | schedule_workflow | Set cron schedule | name, schedule (e.g. "*/30 * * * *") |
 | unschedule_workflow | Remove schedule | name |
 
-**Workflow steps:** \`{ mcp: string, tool: string, args?: object }\`. Use \`{{step0}}\`, \`{{step1}}\` in args to inject previous step output.
+**Workflow steps:** \`{ mcp: string, tool: string, args?: object }\`. Placeholders: \`{{step0}}\`, \`{{step1.id}}\`, \`{{step1.playlists[1].id}}\` (nested + array index), \`{{step1:regex:pat}}\`, \`{{step0:regexAll:pat}}\`, \`{{input.key}}\` (from run_workflow input), \`{{date.now}}\`, \`{{date.isoDate}}\`, \`{{date.isoTime}}\`, \`{{date.isoDateTime}}\`, \`{{date.timestamp}}\`, \`{{uuid}}\`, \`{{date.year}}\`, \`{{date.month}}\`, \`{{date.day}}\`, \`{{date.weekday}}\`, \`{{js: expression }}\`.
 
 ## MCP Connection Management
 
@@ -929,7 +987,7 @@ Each MCP's tools are exposed as \`mcpName__toolName\` (e.g. \`spotify__getNowPla
 | call_tool | Call a tool by mcp/tool/args | mcp, tool, args? |
 | list_tools | List tools per MCP | mcp? (omit for all) |
 
-**Direct use:** Tools are also exposed as \`mcpName__toolName\`. Call those directly.
+**Gateway mode (default):** Each MCP exposes \`mcpName__call\` (or \`prefix__call\`). Use \`list_tools\` to discover, then \`spotify__call(tool, args)\`. Set \`proxyMode: "full"\` for legacy \`mcpName__toolName\` per-tool proxying.
 
 **Gotcha:** MCP must be enabled. Use \`enable_mcp\` first if disabled.
 
@@ -964,6 +1022,7 @@ Each MCP's tools are exposed as \`mcpName__toolName\` (e.g. \`spotify__getNowPla
 | orchestrator://status | Resource: MCP + tunnel status |
 | orchestrator://logs | Resource: logs |
 | orchestrator://glossary | Resource: this glossary |
+| orchestrator://workflow-guide | Resource: workflow creation guide |
 `;
 }
 

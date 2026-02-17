@@ -19,7 +19,17 @@ import {
   runCloudflareLogin,
   getTunnelBaseDomain,
 } from './tunnel.js';
-import { getSecret, setSecret, deleteSecret, listSecretKeys } from './secrets.js';
+import {
+  getSecret,
+  setSecret,
+  deleteSecret,
+  listSecretKeys,
+  generateMasterKey,
+  isEncryptionEnabled,
+  bootstrapSecretsFromKeychain,
+  storeMasterKeyInKeychain,
+  deriveKeyFromPassword,
+} from './secrets.js';
 import { getTunnelToken, setTunnelToken, deleteTunnelToken, generateTunnelToken, getTunnelTokenMcpNames } from './tunnel-tokens.js';
 import { handleTunnelProxy } from './tunnel-proxy.js';
 import { toTunnelSubdomain } from './config.js';
@@ -31,6 +41,7 @@ import {
   type Platform,
   type Client,
 } from './mcp-client-install.js';
+import { ensurePortAvailable } from './port-utils.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -56,6 +67,9 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 async function main() {
+  // Load master key from OS keychain into env (if not already set) before any secret access
+  bootstrapSecretsFromKeychain();
+
   // Apply startOnStartup: spin up MCPs that should start when the server starts
   const initialConfig = loadConfig();
   let configChanged = false;
@@ -131,7 +145,49 @@ async function main() {
       configPath: path.join(cwd, 'mcp-orchestrator.config.json'),
       secretsPath: path.join(cwd, 'mcp-orchestrator.secrets.json'),
       logsPath: path.join(cwd, 'mcp-orchestrator.logs.json'),
+      secretsEncrypted: isEncryptionEnabled(),
     });
+  });
+
+  app.get('/api/secrets/encryption', (_req, res) => {
+    res.json({ enabled: isEncryptionEnabled() });
+  });
+
+  app.post('/api/secrets/generate-master-key', (_req, res) => {
+    const key = generateMasterKey();
+    res.json({
+      key,
+      instructions: [
+        'Add to ~/.mcp-orchestrator.env:',
+        `MCP_ORCHESTRATOR_MASTER_KEY='${key}'`,
+        'Then chmod 600 ~/.mcp-orchestrator.env and restart the server.',
+      ],
+    });
+  });
+
+  app.post('/api/secrets/setup-encryption', (req, res) => {
+    try {
+      const { password } = (req.body || {}) as { password?: string };
+      if (!password || typeof password !== 'string' || password.length < 8) {
+        return res.status(400).json({
+          error: 'Password required (min 8 characters). Used to derive encryption key; stored in OS keychain.',
+        });
+      }
+      storeMasterKeyInKeychain(password, true);
+      const key = deriveKeyFromPassword(password);
+      process.env.MCP_ORCHESTRATOR_MASTER_KEY = key;
+      // Force re-encrypt existing secrets
+      for (const k of listSecretKeys()) {
+        const v = getSecret(k);
+        if (v) setSecret(k, v);
+      }
+      res.json({
+        ok: true,
+        message: 'Encryption key stored in OS keychain. Existing secrets have been re-encrypted.',
+      });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
   });
 
   app.get('/api/logs', (_req, res) => {
@@ -213,7 +269,7 @@ async function main() {
 
   app.post('/api/registry/install', (req, res) => {
     try {
-      const { server: serverDetail } = req.body as {
+      const { server: serverDetail, env: envOverrides } = req.body as {
         server?: {
           name: string;
           title?: string;
@@ -230,6 +286,7 @@ async function main() {
           }>;
           remotes?: Array<{ type: string; url: string }>;
         };
+        env?: Record<string, string>;
       };
       if (!serverDetail?.name) {
         return res.status(400).json({ error: 'Missing server data' });
@@ -237,14 +294,16 @@ async function main() {
       const displayName = serverDetail.title || serverDetail.name.split('/').pop() || serverDetail.name;
       const config = loadConfig();
 
+      const toFinalName = (base: string) => {
+        const name = base.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-_]/g, '');
+        const existing = Object.keys(config.mcps).filter((k) => k.toLowerCase() === name.toLowerCase())[0];
+        return existing || (Object.keys(config.mcps).includes(name) ? `${name}-${Date.now()}` : name);
+      };
+
       if (serverDetail.remotes?.length) {
         const remote = serverDetail.remotes[0];
         if (remote.type === 'streamable-http' || remote.type === 'sse') {
-          const name = displayName.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-_]/g, '');
-          const existing = Object.keys(config.mcps).filter((k) =>
-            k.toLowerCase() === name.toLowerCase()
-          )[0];
-          const finalName = existing || (Object.keys(config.mcps).includes(name) ? `${name}-${Date.now()}` : name);
+          const finalName = toFinalName(displayName);
           config.mcps[finalName] = { type: 'url', url: remote.url, enabled: true };
           saveConfig(config);
           appendLog({
@@ -257,40 +316,68 @@ async function main() {
       }
 
       if (serverDetail.packages?.length) {
-        const pkg = serverDetail.packages.find(
+        const npmPkg = serverDetail.packages.find(
           (p: { registryType?: string; transport?: { type?: string } }) =>
             p.registryType === 'npm' && p.transport?.type === 'stdio'
-        ) ?? serverDetail.packages[0];
-        if (pkg.registryType === 'npm' && pkg.transport?.type === 'stdio') {
-          const ver =
-            pkg.version && pkg.version !== 'latest'
-              ? `@${pkg.version}`
-              : '';
-          const id = pkg.identifier + ver;
-          const hint = pkg.runtimeHint || 'npx';
-          const runtimeArgs = Array.isArray(pkg.runtimeArguments)
-            ? pkg.runtimeArguments.map((a) =>
+        );
+        const pypiPkg = serverDetail.packages.find(
+          (p: { registryType?: string; transport?: { type?: string } }) =>
+            p.registryType === 'pypi' && p.transport?.type === 'stdio'
+        );
+
+        if (npmPkg) {
+          const ver = npmPkg.version && npmPkg.version !== 'latest' ? `@${npmPkg.version}` : '';
+          const id = npmPkg.identifier + ver;
+          const hint = npmPkg.runtimeHint || 'npx';
+          const runtimeArgs = Array.isArray(npmPkg.runtimeArguments)
+            ? npmPkg.runtimeArguments.map((a) =>
                 typeof a === 'object' && a && 'value' in (a as object) ? String((a as { value: string }).value) : String(a)
               )
             : ['-y'];
-          const pkgArgs = Array.isArray(pkg.packageArguments)
-            ? pkg.packageArguments.map((a) =>
+          const pkgArgs = Array.isArray(npmPkg.packageArguments)
+            ? npmPkg.packageArguments.map((a) =>
                 typeof a === 'object' && a && 'value' in (a as object) ? String((a as { value: string }).value) : String(a)
               )
             : [];
           const args = [...runtimeArgs, id, ...pkgArgs].filter(Boolean);
-          let command = hint;
-          if (hint === 'npx') command = 'npx';
-          const name = displayName.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-_]/g, '');
-          const existing = Object.keys(config.mcps).filter((k) =>
-            k.toLowerCase() === name.toLowerCase()
-          )[0];
-          const finalName = existing || (Object.keys(config.mcps).includes(name) ? `${name}-${Date.now()}` : name);
+          const command = hint === 'npx' ? 'npx' : hint;
+          const finalName = toFinalName(displayName);
           config.mcps[finalName] = {
             type: 'stdio',
             command,
             args,
             enabled: true,
+            ...(envOverrides && Object.keys(envOverrides).length ? { env: envOverrides } : {}),
+          };
+          saveConfig(config);
+          appendLog({
+            type: 'install',
+            message: 'Installed MCP from registry',
+            detail: `${displayName} → ${finalName}`,
+          });
+          return res.json({ ok: true, name: finalName });
+        }
+
+        if (pypiPkg) {
+          const identifier = pypiPkg.identifier;
+          const ver = pypiPkg.version && pypiPkg.version !== 'latest' ? `==${pypiPkg.version}` : '';
+          const pkgSpec = identifier + ver;
+          const pkgArgs = Array.isArray(pypiPkg.packageArguments)
+            ? (pypiPkg.packageArguments as unknown[]).map((a) =>
+                typeof a === 'object' && a && 'value' in (a as object)
+                  ? String((a as { value: string }).value)
+                  : String(a)
+              )
+            : [];
+          const command = 'uvx';
+          const args = [pkgSpec, ...pkgArgs].filter(Boolean);
+          const finalName = toFinalName(displayName);
+          config.mcps[finalName] = {
+            type: 'stdio',
+            command,
+            args,
+            enabled: true,
+            ...(envOverrides && Object.keys(envOverrides).length ? { env: envOverrides } : {}),
           };
           saveConfig(config);
           appendLog({
@@ -310,9 +397,10 @@ async function main() {
 
   app.post('/api/install-npm', (req, res) => {
     try {
-      const { package: pkg, args: extraArgs = [] } = req.body as {
+      const { package: pkg, args: extraArgs = [], env: envOverrides } = req.body as {
         package?: string;
         args?: string[];
+        env?: Record<string, string>;
       };
       const pkgTrim = (pkg || '').trim();
       if (!pkgTrim || !/^@?[\w.-]+\/[\w.-]+$/.test(pkgTrim.replace(/^@/, ''))) {
@@ -326,8 +414,9 @@ async function main() {
       config.mcps[finalName] = {
         type: 'stdio',
         command: 'npx',
-        args: ['-y', withAt, ...extraArgs].filter(Boolean),
+        args: ['-y', withAt, ...(extraArgs || [])].filter(Boolean),
         enabled: true,
+        ...(envOverrides && Object.keys(envOverrides).length ? { env: envOverrides } : {}),
       };
       saveConfig(config);
       appendLog({
@@ -467,7 +556,8 @@ async function main() {
     try {
       const config = loadConfig();
       const name = req.params.name;
-      const { stepOutputs, success } = await runWorkflow(config, name);
+      const input = (req.body as { input?: Record<string, unknown> | unknown[] })?.input;
+      const { stepOutputs, success } = await runWorkflow(config, name, input);
       appendLog({
         type: 'run',
         message: `Workflow "${name}"`,
@@ -778,7 +868,8 @@ async function main() {
 
   startScheduler(loadConfig());
 
-  const port = process.env.PORT ?? 3847;
+  const desiredPort = Number(process.env.PORT ?? 3847);
+  const port = await ensurePortAvailable(desiredPort);
   app.listen(port, () => {
     console.log(`MCP Orchestrator UI → http://localhost:${port}`);
     console.log(`  Also: http://mcporch.local:${port} (if hosts configured)`);

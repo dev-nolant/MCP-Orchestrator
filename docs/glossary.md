@@ -1,6 +1,6 @@
 # MCP Orchestrator Tools — Glossary
 
-Read this to understand every tool and how to use it.
+Read this to understand every tool and how to use it. For creating workflows, read `orchestrator://workflow-guide`.
 
 ## Overview
 
@@ -26,14 +26,16 @@ Use `call_tool` when you need to specify mcp/tool explicitly (e.g. dynamic tool 
 |------|---------|----------|
 | list_workflows | List workflows | (none) |
 | get_workflow | Get full workflow | name |
-| run_workflow | Execute workflow | name |
+| run_workflow | Execute workflow | name, input? (for {{input.key}}) |
 | add_workflow | Create workflow | name, steps[], description?, trigger?, schedule? |
 | update_workflow | Update workflow | name, steps?, description?, trigger?, schedule? |
 | delete_workflow | Delete workflow | name |
 | schedule_workflow | Set cron schedule | name, schedule (e.g. "*/30 * * * *") |
 | unschedule_workflow | Remove schedule | name |
 
-**Workflow steps:** `{ mcp: string, tool: string, args?: object }`. Use placeholders in args: `{{step0}}` (full output), `{{step1.id}}` (JSON path), `{{step1:regex:pat}}` (single capture), `{{step0:regexAll:pat}}` (all captures as array).
+**Workflow steps:** `{ mcp: string, tool: string, args?: object }`. Placeholders: `{{step0}}`, `{{step1.id}}`, `{{step1.playlists[1].id}}` (nested + array index), `{{step1:regex:pat}}`, `{{step0:regexAll:pat}}`, `{{input.key}}` (from run_workflow input), `{{date.now}}`, `{{date.isoDate}}`, `{{date.isoTime}}`, `{{date.isoDateTime}}`, `{{date.timestamp}}`, `{{uuid}}`, `{{date.year}}`, `{{date.month}}`, `{{date.day}}`, `{{date.weekday}}`, `{{js: expression }}`.
+
+**Tool routing (default: gateway):** With `proxyMode: "gateway"`, each MCP exposes one route: `mcpName__call` (or `prefix__call`). Call it with `tool` + `args`. Use `list_tools(mcp="…")` to discover tools. Keeps total tools low (e.g. 3 MCPs → 3 gateway tools). Set `proxyMode: "full"` to expose every tool as `mcp__toolName` (legacy).
 
 ## MCP Connection Management
 
@@ -83,3 +85,4 @@ Use `call_tool` when you need to specify mcp/tool explicitly (e.g. dynamic tool 
 | orchestrator://status | Resource: MCP + tunnel status |
 | orchestrator://logs | Resource: logs |
 | orchestrator://glossary | Resource: this glossary |
+| orchestrator://workflow-guide | Resource: workflow creation guide — read before creating/editing workflows |

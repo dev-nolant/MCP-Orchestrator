@@ -2,7 +2,7 @@ import path from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { resolveAuthorizationToken } from './auth-resolver.js';
+import { resolveAuthorizationToken, resolveEnv } from './auth-resolver.js';
 import type { McpConfig } from './config.js';
 
 /** Resolve node/npx to full paths so spawn works when PATH is minimal (e.g. launchd/systemd). */
@@ -36,11 +36,12 @@ export function createMcpClient(name: string, config: McpConfig): {
 
   if (config.type === 'stdio') {
     const command = resolveStdioCommand(config.command);
+    const resolvedEnv = resolveEnv(config.env);
     const transport = new StdioClientTransport({
       command,
       args: config.args ?? [],
       cwd: config.cwd,
-      env: config.env,
+      env: Object.keys(resolvedEnv).length ? resolvedEnv : undefined,
     });
     const client = new Client(
       { name: `mcp-orchestrator-${name}`, version: '0.1.0' },

@@ -14,12 +14,14 @@
     "list": "tsc && node build/index.js list",
     "workflow": "tsc && node build/index.js workflow",
     "ui": "npx tsc && node build/server.js",
-    "mcp-bridge": "node build/mcp-bridge.js"
+    "mcp-bridge": "node build/mcp-bridge.js",
+    "setup-encryption": "npx tsc && node build/setup-encryption.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@pyroprompts/mcp-stdio-to-streamable-http-adapter": "^0.1.0",
     "express": "^4.21.0",
+    "keytar-sync": "^7.9.1",
     "node-cron": "^4.2.1"
   },
   "devDependencies": {
