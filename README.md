@@ -154,12 +154,12 @@ One-command installer that runs the server in the background and adds **mcporch.
 
 **Mac & Linux:**
 ```bash
-curl -sSL https://raw.githubusercontent.com/dev-nolant/MCP-Orchestrator/main/scripts/bootstrap.sh | bash
+bash <(curl -sSL https://raw.githubusercontent.com/dev-nolant/MCP-Orchestrator/main/scripts/bootstrap.sh)
 ```
 
 **Skip auto-start:**
 ```bash
-curl -sSL https://raw.githubusercontent.com/dev-nolant/MCP-Orchestrator/main/scripts/bootstrap.sh | bash -s -- --no-startup
+bash <(curl -sSL https://raw.githubusercontent.com/dev-nolant/MCP-Orchestrator/main/scripts/bootstrap.sh) --no-startup
 ```
 
 **Windows PowerShell:**
@@ -169,7 +169,9 @@ irm https://raw.githubusercontent.com/dev-nolant/MCP-Orchestrator/main/scripts/b
 
 **Windows, skip auto-start:** `$env:NO_STARTUP=1; irm https://raw.githubusercontent.com/dev-nolant/MCP-Orchestrator/main/scripts/bootstrap.ps1 | iex`
 
-The bootstrap clones the repo to `~/mcp-orchestrator`, runs `npm install` and `npm run build`, then starts the server.
+The bootstrap clones the repo to `~/mcp-orchestrator`, runs `npm install` and `npm run build`, then starts the server. It will prompt for optional tools (uv, cloudflared) and encrypted secrets setup.
+
+**Non-interactive** (CI, automation, skip all prompts): `curl -sSL https://raw.githubusercontent.com/dev-nolant/MCP-Orchestrator/main/scripts/bootstrap.sh | bash`
 
 ---
 
