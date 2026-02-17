@@ -21,6 +21,7 @@ Connect MCPs locally (via URL or stdio) and automate actions between them. Chain
 - [Workflows](#workflows)
 - [Easy Install (Mac, Linux, Windows)](#easy-install-mac-linux-windows)
 - [Uninstall](#uninstall)
+- [Connect (MCP Client Setup)](#connect-mcp-client-setup)
 - [Web UI](#web-ui)
 - [CLI](#cli)
 - [Use as an MCP](#use-as-an-mcp)
@@ -88,7 +89,15 @@ Store a token via API: `PUT /api/secrets/:key` with `{ "value": "your-token" }`.
 
 ## Workflows
 
-Workflows chain steps. Use `{{step0}}`, `{{step1}}`, etc. to inject the text output of a previous step into the next step's args.
+Workflows chain steps. Use placeholders to inject previous step output into the next step's args:
+
+| Placeholder | Use case |
+|-------------|----------|
+| `{{step0}}` | Full text output of step 0 |
+| `{{step1.id}}` | JSON path – when the step returns valid JSON, extract `id` (or nested `data.items.0.id`) |
+| `{{step1:regex:Playlist ID: (\w+)}}` | Regex – single capture group from text |
+| `{{step0:regexAll:ID: (\w+)}}` | Regex all – all capture groups as **array** (e.g. track IDs from lines) |
+| `{{step0:regexAll:ID: (\w+):array}}` | Same; optional `:array` suffix is stripped from the pattern (use for clarity) |
 
 Example: Spotify → Pieces
 
@@ -238,7 +247,9 @@ npm run ui
 
 The UI lets you:
 
+
 - **Add MCPs** by URL (e.g. `http://localhost:39300/.../mcp`) or by file/stdio (command, args, cwd)
+- **Connect** — Add MCP Orchestrator to Cursor, Claude Desktop, Windsurf, or Continue via Easy Install 
 - **Build workflows** by chaining actions from your MCPs; use `{{step0}}`, `{{step1}}` in args to pass output between steps
 - **Schedule workflows** to run automatically (cron) via the Schedule tab
 - **Run workflows** and view output
@@ -260,6 +271,28 @@ To sync Spotify → Pieces automatically every 30 minutes:
 ```cron
 */30 * * * * cd /path/to/mcp-orchestrator && npm run workflow -- "Spotify to Pieces"
 ```
+
+## Connect (MCP Client Setup)
+
+The **Connect** tab in the Web UI makes it easy to add MCP Orchestrator to your AI client.
+
+1. Open the UI (`npm run ui`) → **Connect** tab
+2. Select your **platform** (macOS, Windows, Linux — auto-detected)
+3. Select your **client** (Cursor, Claude Desktop, Windsurf, Continue)
+4. Click **Easy Install** to write the config into the correct file while keeping your existing MCPs
+
+Or use **Copy config** to paste the JSON manually. Restart your client after saving.
+
+| Client | Config path (macOS) |
+|--------|---------------------|
+| Cursor | `~/.cursor/mcp.json` |
+| Claude Desktop | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` |
+| Continue | `~/.continue/config.json` |
+
+**Claude Desktop note:** Claude only supports stdio MCPs, not HTTP. Easy Install uses the built-in stdio bridge (`mcp-bridge.js`) so Claude can talk to the orchestrator’s HTTP endpoint. Ensure MCP Orchestrator is running before opening Claude.
+
+**Run from the mcp-orchestrator directory** when using Easy Install so the bridge path resolves correctly (e.g. `cd mcp-orchestrator && npm run ui`).
 
 ## Use as an MCP
 
@@ -285,23 +318,27 @@ Use `call_tool` to test an MCP connection (e.g. `call_tool(mcp: "spotify", tool:
 
 ### Setup
 
-Add the orchestrator as a **Streamable HTTP** MCP with URL `http://localhost:3847/mcp` (or `http://mcporch.local:3847/mcp` if using the hosts entry).
+Add the orchestrator as a **Streamable HTTP** MCP with URL `http://localhost:3847/mcp` (or `http://mcporch.local:3847/mcp` if using the hosts entry). **Easiest:** use the Connect tab → Easy Install.
 
-**Cursor:** Settings → MCP → Add server with the URL above, then restart.
+**Cursor, Windsurf, Continue:** These clients support HTTP MCPs. Add URL `http://localhost:3847/mcp` in your client’s MCP settings, or use Connect → Easy Install.
 
-**Claude Desktop:** In `claude_desktop_config.json`:
+**Claude Desktop:** Claude only supports stdio MCPs. Use Connect → Easy Install (it adds a stdio bridge config), or add manually to `claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
     "mcp-orchestrator": {
-      "url": "http://localhost:3847/mcp"
+      "command": "node",
+      "args": ["/path/to/mcp-orchestrator/build/mcp-bridge.js"],
+      "env": {
+        "MCP_ORCHESTRATOR_URI": "http://localhost:3847/mcp"
+      }
     }
   }
 }
 ```
 
-Ensure the MCP Orchestrator server is running (`npm run ui` or via the install scripts) before connecting.
+Replace `/path/to/mcp-orchestrator` with your install path. Ensure the MCP Orchestrator server is running (`npm run ui` or via the install scripts) before connecting.
 
 ## Public URL (Tunnel)
 

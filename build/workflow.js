@@ -1,12 +1,71 @@
 import { ensureArgsObject } from './args-wrappers.js';
 import { createMcpClient, extractTextContent } from './connector.js';
-const STEP_PLACEHOLDER = /\{\{step(\d+)\}\}/g;
+// Matches: {{stepN}}, {{stepN.path}}, {{stepN:regex:pat}}, {{stepN:regexAll:pat}}
+const STEP_PLACEHOLDER = /\{\{step(\d+)(?:\.([^}]+)|:regex:([^}]+)|:regexAll:([^}]+))?\}\}/g;
+function getByPath(obj, path) {
+    const parts = path.trim().split('.');
+    let cur = obj;
+    for (const p of parts) {
+        if (cur == null || typeof cur !== 'object')
+            return undefined;
+        cur = cur[p];
+    }
+    return cur;
+}
+function resolvePlaceholder(stepIndex, path, regexPat, regexAllPat, stepOutputs) {
+    const raw = stepOutputs[stepIndex] ?? '';
+    if (path !== undefined) {
+        try {
+            const data = JSON.parse(raw);
+            const val = getByPath(data, path);
+            return val !== undefined ? val : '';
+        }
+        catch {
+            return '';
+        }
+    }
+    if (regexPat !== undefined) {
+        const pattern = regexPat.replace(/:array$/, '').trim();
+        const m = new RegExp(pattern).exec(raw);
+        const val = m?.[1] ?? '';
+        return regexPat.endsWith(':array') ? (val ? [val] : []) : val;
+    }
+    if (regexAllPat !== undefined) {
+        const pattern = regexAllPat.replace(/:array$/, '').trim();
+        const re = new RegExp(pattern, 'g');
+        const matches = [...raw.matchAll(re)];
+        return matches.map((m) => m[1]).filter((s) => s !== undefined);
+    }
+    return raw;
+}
+function substituteInString(str, stepOutputs) {
+    const matches = [...str.matchAll(new RegExp(STEP_PLACEHOLDER.source, 'g'))];
+    if (matches.length === 0)
+        return str;
+    const trimmed = str.trim();
+    const singleMatch = matches.length === 1 &&
+        matches[0] &&
+        str.trim() === matches[0][0];
+    if (singleMatch) {
+        const m = matches[0];
+        const idx = parseInt(m[1], 10);
+        const resolved = resolvePlaceholder(idx, m[2], m[3], m[4], stepOutputs);
+        return resolved;
+    }
+    let result = str;
+    for (const m of matches) {
+        const idx = parseInt(m[1], 10);
+        const resolved = resolvePlaceholder(idx, m[2], m[3], m[4], stepOutputs);
+        const repl = typeof resolved === 'object'
+            ? JSON.stringify(resolved)
+            : String(resolved);
+        result = result.replace(m[0], repl);
+    }
+    return result;
+}
 function substituteStepOutputs(obj, stepOutputs) {
     if (typeof obj === 'string') {
-        return obj.replace(STEP_PLACEHOLDER, (_, i) => {
-            const idx = parseInt(i, 10);
-            return stepOutputs[idx] ?? '';
-        });
+        return substituteInString(obj, stepOutputs);
     }
     if (Array.isArray(obj)) {
         return obj.map((item) => substituteStepOutputs(item, stepOutputs));

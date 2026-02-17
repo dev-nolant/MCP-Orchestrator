@@ -28,7 +28,7 @@ To test an MCP: `call_tool` with mcp, tool, and args.
 | schedule_workflow | Set cron schedule | name, schedule (e.g. "*/30 * * * *") |
 | unschedule_workflow | Remove schedule | name |
 
-**Workflow steps:** `{ mcp: string, tool: string, args?: object }`. Use `{{step0}}`, `{{step1}}` in args to inject previous step output.
+**Workflow steps:** `{ mcp: string, tool: string, args?: object }`. Use placeholders in args: `{{step0}}` (full output), `{{step1.id}}` (JSON path), `{{step1:regex:pat}}` (single capture), `{{step0:regexAll:pat}}` (all captures as array).
 
 ## MCP Connection Management
 

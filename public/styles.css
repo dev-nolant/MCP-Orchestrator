@@ -2475,3 +2475,115 @@ body {
 .settings-error {
   color: var(--error);
 }
+
+/* Connect panel */
+.connect-intro {
+  color: var(--text-muted);
+  margin-bottom: 1.25rem;
+  max-width: 560px;
+}
+
+.connect-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-end;
+  margin-bottom: 1rem;
+}
+
+.connect-form .form-row {
+  margin: 0;
+}
+
+.connect-form label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 500;
+  margin-bottom: 0.35rem;
+  color: var(--text-muted);
+}
+
+.connect-select {
+  min-width: 160px;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.connect-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.connect-status {
+  padding: 0.6rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.connect-status-success {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--success);
+}
+
+.connect-status-error {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--error);
+}
+
+.connect-config-label {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin: 1rem 0 0.5rem;
+}
+
+.connect-config-preview {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.connect-guide {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: var(--bg-elevated);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.connect-guide summary {
+  cursor: pointer;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.connect-guide-content {
+  margin-top: 0.75rem;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.connect-guide-content code {
+  background: var(--bg);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  font-size: 0.85em;
+}
+
+.connect-guide-content ul {
+  margin: 0.5rem 0 0 1rem;
+  padding: 0;
+}

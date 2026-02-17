@@ -13,10 +13,12 @@
     "run": "tsc && node build/index.js",
     "list": "tsc && node build/index.js list",
     "workflow": "tsc && node build/index.js workflow",
-    "ui": "npx tsc && node build/server.js"
+    "ui": "npx tsc && node build/server.js",
+    "mcp-bridge": "node build/mcp-bridge.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
+    "@pyroprompts/mcp-stdio-to-streamable-http-adapter": "^0.1.0",
     "express": "^4.21.0",
     "node-cron": "^4.2.1"
   },
