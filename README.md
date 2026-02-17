@@ -87,6 +87,16 @@ Supported formats:
 
 Store a token via API: `PUT /api/secrets/:key` with `{ "value": "your-token" }`. Restrict file permissions: `chmod 600 mcp-orchestrator.secrets.json`.
 
+### Tool routing: gateway vs full
+
+**Default: `proxyMode: "gateway"`** — One route per MCP instead of per tool. Keeps tool count low (3 MCPs → 3 gateway tools + native orchestrator tools).
+
+- Call `spotify__call(tool="getNowPlaying", args={})` or `P__call(tool="create_pieces_memory", args={})`
+- Use `list_tools(mcp="spotify")` to discover available tools
+- Workflows unchanged — they use `mcp` + `tool` in steps
+
+**Legacy: `proxyMode: "full"`** — Every MCP tool as its own proxy (`spotify__getNowPlaying`, `Pieces__create_pieces_memory`, etc.). Full ergonomics but can exceed 80-tool limits with many MCPs. Use `proxyPrefix`, `toolsInclude`, or `toolsExclude` per MCP to trim.
+
 ## Workflows
 
 Workflows chain steps. Use placeholders to inject previous step output into the next step's args:
@@ -94,10 +104,16 @@ Workflows chain steps. Use placeholders to inject previous step output into the 
 | Placeholder | Use case |
 |-------------|----------|
 | `{{step0}}` | Full text output of step 0 |
-| `{{step1.id}}` | JSON path – when the step returns valid JSON, extract `id` (or nested `data.items.0.id`) |
-| `{{step1:regex:Playlist ID: (\w+)}}` | Regex – single capture group from text |
-| `{{step0:regexAll:ID: (\w+)}}` | Regex all – all capture groups as **array** (e.g. track IDs from lines) |
-| `{{step0:regexAll:ID: (\w+):array}}` | Same; optional `:array` suffix is stripped from the pattern (use for clarity) |
+| `{{step1.id}}` | JSON path – when the step returns valid JSON, extract `id` |
+| `{{step1:regex:Playlist ID: (\w+)}}` | Regex – single capture group |
+| `{{step0:regexAll:ID: (\w+)}}` | Regex all – all captures as **array** |
+| `{{now}}` | Current time in ISO format |
+| `{{isoDate}}` | Today's date (YYYY-MM-DD) |
+| `{{date}}` | Local date string |
+| `{{timestamp}}` | Unix milliseconds |
+| `{{uuid}}` | Random UUID |
+| `{{year}}`, `{{month}}`, `{{day}}`, `{{weekday}}` | Date parts |
+| `{{js: new Date().toLocaleDateString('en-US', {month:'long'}) }}` | Arbitrary JavaScript expression |
 
 Example: Spotify → Pieces
 
@@ -250,7 +266,7 @@ The UI lets you:
 
 - **Add MCPs** by URL (e.g. `http://localhost:39300/.../mcp`) or by file/stdio (command, args, cwd)
 - **Connect** — Add MCP Orchestrator to Cursor, Claude Desktop, Windsurf, or Continue via Easy Install 
-- **Build workflows** by chaining actions from your MCPs; use `{{step0}}`, `{{step1}}` in args to pass output between steps
+- **Build workflows** by chaining actions from your MCPs; use `{{step0}}`, `{{step1}}`, `{{now}}`, `{{isoDate}}`, etc. in args
 - **Schedule workflows** to run automatically (cron) via the Schedule tab
 - **Run workflows** and view output
 
@@ -300,6 +316,7 @@ The MCP Orchestrator is a first-class MCP server. Add it to any MCP client (Curs
 
 ### Resources (read these for context)
 - `orchestrator://glossary` — Read first: reference for every tool, args, usage, examples (customize via `docs/glossary.md`)
+- `orchestrator://workflow-guide` — Instruction set for creating workflows: manual run, output inspection, placeholders (see `docs/creating-workflows.md`)
 - `orchestrator://config` — Full config (mcps, workflows)
 - `orchestrator://status` — MCP health + tunnel status
 - `orchestrator://logs` — Recent logs

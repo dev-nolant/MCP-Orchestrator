@@ -1895,7 +1895,7 @@ function showWorkflowModal(existingIndex = null) {
   const container = document.getElementById('steps-container');
   const stepOutputsByBlock = new Map();
 
-  const STEP_PLACEHOLDER = /\{\{step(\d+)(?:\.([^}]+)|:regex:([^}]+)|:regexAll:([^}]+))?\}\}/g;
+  const STEP_REF_REGEX = /\{\{step(\d+)/g;
 
   function getReferencedStepIndices(argsStr) {
     const indices = new Set();
@@ -1903,7 +1903,7 @@ function showWorkflowModal(existingIndex = null) {
       const obj = argsStr.trim() ? JSON.parse(argsStr) : {};
       const search = (o) => {
         if (typeof o === 'string') {
-          for (const m of o.matchAll(STEP_PLACEHOLDER)) indices.add(parseInt(m[1], 10));
+          for (const m of o.matchAll(STEP_REF_REGEX)) indices.add(parseInt(m[1], 10));
         } else if (Array.isArray(o)) {
           o.forEach(search);
         } else if (o && typeof o === 'object') {
@@ -1915,67 +1915,145 @@ function showWorkflowModal(existingIndex = null) {
     return indices;
   }
 
+  const PLACEHOLDER_REGEX = /\{\{([^}]+)\}\}/g;
+  const STEP_PATTERN = /^step(\d+)(?:\.([^:}]+)|:regex:([^}]+)|:regexAll:([^}]+))?$/;
+
+  function getDateValues() {
+    const d = new Date();
+    const iso = d.toISOString();
+    return {
+      now: iso,
+      isoDateTime: iso,
+      isoDate: iso.slice(0, 10),
+      isoTime: iso.slice(11, 23),
+      timestamp: d.getTime(),
+      date: d.toLocaleDateString(),
+      year: d.getFullYear().toString(),
+      month: (d.getMonth() + 1).toString(),
+      day: d.getDate().toString(),
+      weekday: d.toLocaleDateString(undefined, { weekday: 'long' }),
+    };
+  }
+
+  const BUILTINS = {
+    uuid: () => crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/x/g, () => ((Math.random() * 16) | 0).toString(16)),
+    now: () => getDateValues().now,
+    isoDateTime: () => getDateValues().isoDateTime,
+    isoDate: () => getDateValues().isoDate,
+    isoTime: () => getDateValues().isoTime,
+    timestamp: () => getDateValues().timestamp,
+    date: () => getDateValues().date,
+    year: () => getDateValues().year,
+    month: () => getDateValues().month,
+    day: () => getDateValues().day,
+    weekday: () => getDateValues().weekday,
+  };
+
   function getByPath(obj, path) {
-    const parts = path.trim().split('.');
+    const pathStr = path.trim();
+    if (!pathStr) return obj;
+    const parts = [];
+    let rest = pathStr;
+    while (rest) {
+      rest = rest.replace(/^\./, '');
+      if (!rest) break;
+      const bracketIdx = rest.indexOf('[');
+      const dotIdx = rest.indexOf('.');
+      if (bracketIdx >= 0 && (dotIdx < 0 || bracketIdx < dotIdx)) {
+        if (bracketIdx > 0) parts.push(rest.slice(0, bracketIdx));
+        const closeIdx = rest.indexOf(']', bracketIdx);
+        if (closeIdx < 0) return undefined;
+        const indexStr = rest.slice(bracketIdx + 1, closeIdx).trim();
+        const num = /^\d+$/.test(indexStr) ? parseInt(indexStr, 10) : NaN;
+        parts.push(isNaN(num) ? indexStr.replace(/^["']|["']$/g, '') : num);
+        rest = rest.slice(closeIdx + 1);
+      } else if (dotIdx >= 0) {
+        parts.push(rest.slice(0, dotIdx));
+        rest = rest.slice(dotIdx);
+      } else {
+        parts.push(rest);
+        rest = '';
+      }
+    }
     let cur = obj;
     for (const p of parts) {
       if (cur == null || typeof cur !== 'object') return undefined;
-      cur = cur[p];
+      cur = typeof p === 'number' ? cur[p] : cur[p];
     }
     return cur;
   }
 
-  function resolvePlaceholder(stepIndex, path, regexPat, regexAllPat, stepOutputs) {
-    const raw = stepOutputs[stepIndex] ?? '';
-    if (path !== undefined) {
-      try {
-        const data = JSON.parse(raw);
-        const val = getByPath(data, path);
-        return val !== undefined ? val : '';
-      } catch {
-        return '';
+  function evalExpr(expr) {
+    const now = new Date();
+    const scope = { now, date: now, Date, timestamp: Date.now(), Math, JSON };
+    try {
+      return new Function(...Object.keys(scope), `return (${expr.trim()})`)(...Object.values(scope));
+    } catch {
+      return '';
+    }
+  }
+
+  function resolvePlaceholderContent(content, stepOutputs, input) {
+    const t = content.trim();
+    if (t.startsWith('input.')) {
+      const path = t.slice(6).trim();
+      if (input != null) {
+        const val = getByPath(input, path);
+        return val !== undefined && val !== null ? val : '';
       }
+      return '';
     }
-    if (regexPat !== undefined) {
-      const pattern = regexPat.replace(/:array$/, '').trim();
-      const m = new RegExp(pattern).exec(raw);
-      const val = m?.[1] ?? '';
-      return regexPat.endsWith(':array') ? (val ? [val] : []) : val;
+    if (t.startsWith('date.')) {
+      const key = t.slice(5).trim();
+      const vals = getDateValues();
+      return key in vals ? vals[key] : '';
     }
-    if (regexAllPat !== undefined) {
-      const pattern = regexAllPat.replace(/:array$/, '').trim();
-      const re = new RegExp(pattern, 'g');
-      const matches = [...raw.matchAll(re)];
-      return matches.map((m) => m[1]).filter((s) => s !== undefined);
+    if (BUILTINS[t]) return BUILTINS[t]();
+    if (t.startsWith('js:')) return evalExpr(t.slice(3));
+    const stepM = t.match(STEP_PATTERN);
+    if (stepM) {
+      const raw = stepOutputs[parseInt(stepM[1], 10)] ?? '';
+      if (stepM[2]) {
+        try {
+          const val = getByPath(JSON.parse(raw), stepM[2]);
+          return val !== undefined ? val : '';
+        } catch {
+          return '';
+        }
+      }
+      if (stepM[3]) {
+        const pattern = stepM[3].replace(/:array$/, '').trim();
+        const m = new RegExp(pattern).exec(raw);
+        const val = m?.[1] ?? '';
+        return stepM[3].endsWith(':array') ? (val ? [val] : []) : val;
+      }
+      if (stepM[4]) {
+        const pattern = stepM[4].replace(/:array$/, '').trim();
+        const matches = [...raw.matchAll(new RegExp(pattern, 'g'))];
+        return matches.map((m) => m[1]).filter((s) => s !== undefined);
+      }
+      return raw;
     }
-    return raw;
+    return '';
   }
 
-  function substituteInString(str, stepOutputs) {
-    const matches = [...str.matchAll(new RegExp(STEP_PLACEHOLDER.source, 'g'))];
-    if (matches.length === 0) return str;
-    const singleMatch = matches.length === 1 && matches[0] && str.trim() === matches[0][0];
-    if (singleMatch) {
-      const m = matches[0];
-      const idx = parseInt(m[1], 10);
-      return resolvePlaceholder(idx, m[2], m[3], m[4], stepOutputs);
+  function substituteStepOutputs(obj, stepOutputs, input) {
+    if (typeof obj === 'string') {
+      const matches = [...obj.matchAll(new RegExp(PLACEHOLDER_REGEX.source, 'g'))];
+      if (matches.length === 0) return obj;
+      const singleMatch = matches.length === 1 && matches[0] && obj.trim() === matches[0][0];
+      if (singleMatch) {
+        return resolvePlaceholderContent(matches[0][1], stepOutputs, input);
+      }
+      return obj.replace(PLACEHOLDER_REGEX, (_, c) => {
+        const r = resolvePlaceholderContent(c, stepOutputs, input);
+        return typeof r === 'object' ? JSON.stringify(r) : String(r);
+      });
     }
-    let result = str;
-    for (const m of matches) {
-      const idx = parseInt(m[1], 10);
-      const resolved = resolvePlaceholder(idx, m[2], m[3], m[4], stepOutputs);
-      const repl = typeof resolved === 'object' ? JSON.stringify(resolved) : String(resolved);
-      result = result.replace(m[0], repl);
-    }
-    return result;
-  }
-
-  function substituteStepOutputs(obj, stepOutputs) {
-    if (typeof obj === 'string') return substituteInString(obj, stepOutputs);
-    if (Array.isArray(obj)) return obj.map((item) => substituteStepOutputs(item, stepOutputs));
+    if (Array.isArray(obj)) return obj.map((item) => substituteStepOutputs(item, stepOutputs, input));
     if (obj && typeof obj === 'object') {
       const r = {};
-      for (const [k, v] of Object.entries(obj)) r[k] = substituteStepOutputs(v, stepOutputs);
+      for (const [k, v] of Object.entries(obj)) r[k] = substituteStepOutputs(v, stepOutputs, input);
       return r;
     }
     return obj;
@@ -2009,7 +2087,7 @@ function showWorkflowModal(existingIndex = null) {
           if (typeof args !== 'object' || args === null || Array.isArray(args)) {
             throw new Error('Args must be a JSON object');
           }
-          const subbed = substituteStepOutputs(args, stepOutputs);
+          const subbed = substituteStepOutputs(args, stepOutputs, {});
           previewDiv.textContent = JSON.stringify(subbed, null, 2);
           previewDiv.classList.remove('is-error');
         }
@@ -2214,7 +2292,7 @@ function showWorkflowModal(existingIndex = null) {
             break;
           }
 
-          const subbed = substituteStepOutputs(args, stepOutputs);
+          const subbed = substituteStepOutputs(args, stepOutputs, {});
           const { success, output } = await api('/step', {
             method: 'POST',
             body: JSON.stringify({ mcp, tool, args: subbed }),
@@ -2412,8 +2490,23 @@ function renderRunPanel() {
       outputEl.innerHTML = '';
 
       try {
+        let input;
+        const inputEl = document.getElementById('run-input');
+        if (inputEl?.value.trim()) {
+          try {
+            input = JSON.parse(inputEl.value.trim());
+          } catch (_) {
+            outputEl.innerHTML = renderPrettyError('Invalid JSON in Input field');
+            outputEl.classList.add('error');
+            btn.disabled = false;
+            btn.textContent = 'Run';
+            card.classList.remove('running');
+            return;
+          }
+        }
         const { success, stepOutputs } = await api('/workflow/' + encodeURIComponent(name), {
           method: 'POST',
+          body: JSON.stringify(input != null ? { input } : {}),
         });
         card.classList.remove('running');
         card.classList.add(success ? 'success' : 'error');

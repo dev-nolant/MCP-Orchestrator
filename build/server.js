@@ -406,7 +406,8 @@ async function main() {
         try {
             const config = loadConfig();
             const name = req.params.name;
-            const { stepOutputs, success } = await runWorkflow(config, name);
+            const input = req.body?.input;
+            const { stepOutputs, success } = await runWorkflow(config, name, input);
             appendLog({
                 type: 'run',
                 message: `Workflow "${name}"`,

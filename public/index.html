@@ -97,6 +97,10 @@
         <div class="panel-header">
           <h2>Run Workflows</h2>
         </div>
+        <details class="run-input-details" id="run-input-details">
+          <summary>Input (optional) for {{input.key}} placeholders</summary>
+          <textarea id="run-input" class="run-input" placeholder='{"subject": "math"}' rows="3"></textarea>
+        </details>
         <div id="run-workflows" class="run-list"></div>
         <h3 class="output-label">Output</h3>
         <div id="output" class="output-box">

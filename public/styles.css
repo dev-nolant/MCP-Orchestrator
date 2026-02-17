@@ -1463,6 +1463,26 @@ body {
 }
 
 /* Run section */
+.run-input-details {
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+}
+.run-input-details summary {
+  cursor: pointer;
+  color: var(--text-muted);
+}
+.run-input {
+  margin-top: 0.5rem;
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  resize: vertical;
+}
+
 .run-list {
   display: flex;
   flex-direction: column;
