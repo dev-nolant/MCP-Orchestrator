@@ -314,7 +314,7 @@ The MCP Orchestrator is a first-class MCP server. Add it to any MCP client (Curs
 | **Registry** | `search_registry`, `install_from_registry`, `install_npm_mcp` |
 | **Observability** | `get_config`, `get_logs`, `clear_logs` |
 
-Use `call_tool` to test an MCP connection (e.g. `call_tool(mcp: "spotify", tool: "getNowPlaying")`).
+**Direct MCP access:** Each MCP's tools are exposed as `mcpName__toolName` (e.g. `spotify__getNowPlaying`, `pieces__create_pieces_memory`). Call them directly—no workflow required. Use `call_tool` when you need to specify mcp/tool explicitly.
 
 ### Setup
 

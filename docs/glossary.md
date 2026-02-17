@@ -4,7 +4,13 @@ Read this to understand every tool and how to use it.
 
 ## Overview
 
-The MCP Orchestrator connects MCPs locally (stdio or URL), runs workflows that chain tools across MCPs, and can expose MCPs publicly via Cloudflare tunnel. All of this is manageable via MCP tools.
+The MCP Orchestrator connects MCPs locally (stdio or URL), runs workflows that chain tools across MCPs, and can expose MCPs publicly via Cloudflare tunnel. **You can use MCPs directly** — no workflow required.
+
+## Direct MCP Access
+
+Each configured MCP's tools are exposed as **proxied tools** with the format `mcpName__toolName`. For example: `spotify__getNowPlaying`, `spotify__createPlaylist`, `pieces__create_pieces_memory`. Call these like any other tool; no workflow needed.
+
+Use `call_tool` when you need to specify mcp/tool explicitly (e.g. dynamic tool selection) or when a proxied tool isn't available.
 
 ## Quick Start
 
@@ -12,8 +18,7 @@ The MCP Orchestrator connects MCPs locally (stdio or URL), runs workflows that c
 2. `get_mcp_status` — Check which MCPs are online
 3. `list_workflows` — See workflows
 4. `run_workflow` — Run one by name
-
-To test an MCP: `call_tool` with mcp, tool, and args.
+5. **Direct tools** — Call `spotify__getNowPlaying`, `pieces__create_pieces_memory`, etc.
 
 ## Workflow Management
 
@@ -40,10 +45,12 @@ To test an MCP: `call_tool` with mcp, tool, and args.
 | remove_mcp | Remove MCP | name (fails if workflows use it) |
 | enable_mcp | Spin up | name |
 | disable_mcp | Spin down | name |
-| call_tool | **Test:** call one tool | mcp, tool, args? |
+| call_tool | Call a tool by mcp/tool/args | mcp, tool, args? |
 | list_tools | List tools per MCP | mcp? (omit for all) |
 
-**Gotcha:** MCP must be enabled before `call_tool`. Use `enable_mcp` first if disabled.
+**Direct use:** Tools are also exposed as `mcpName__toolName` (e.g. `spotify__getNowPlaying`). Call those directly—no workflow needed.
+
+**Gotcha:** MCP must be enabled. Use `enable_mcp` first if disabled.
 
 ## Tunnel (Public URLs)
 
