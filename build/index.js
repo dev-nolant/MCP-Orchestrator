@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { listAllTools, runWorkflow } from './workflow.js';
+import { bootstrapSecretsFromKeychain } from './secrets.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 function loadConfig(configPath) {
     const p = configPath ?? path.join(process.cwd(), 'mcp-orchestrator.config.json');
@@ -13,6 +14,7 @@ function loadConfig(configPath) {
     return JSON.parse(fs.readFileSync(p, 'utf8'));
 }
 async function main() {
+    bootstrapSecretsFromKeychain();
     const [cmd, ...rest] = process.argv.slice(2);
     const configPath = rest.find((a) => a.startsWith('--config='))?.slice(9);
     const config = loadConfig(configPath);

@@ -671,12 +671,13 @@ async function createMcpServer(): Promise<McpServer> {
     'install_from_registry',
     {
       title: 'Install From Registry',
-      description: 'Install an MCP from the registry. Pass the server object from search_registry.',
+      description: 'Install an MCP from the registry. Pass the server object from search_registry. For MCPs that need env vars (e.g. API_ID, API_HASH), pass env as well.',
       inputSchema: {
         server: z.record(z.string(), z.unknown()).describe('Server object from registry (or { server: {...} })'),
+        env: z.record(z.string(), z.string()).optional().describe('Optional env vars, e.g. { API_ID: "123", API_HASH: "secret:key" }'),
       },
     },
-    async ({ server: serverArg }) => {
+    async ({ server: serverArg, env: envOverrides }) => {
       const serverDetail = (serverArg && typeof serverArg === 'object' && 'server' in serverArg
         ? (serverArg as { server?: unknown }).server
         : serverArg) as {
@@ -698,11 +699,16 @@ async function createMcpServer(): Promise<McpServer> {
       }
       const displayName = serverDetail.title || serverDetail.name.split('/').pop() || serverDetail.name;
       const config = loadConfig();
+
+      const toFinalName = (base: string) => {
+        const name = base.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-_]/g, '');
+        return Object.keys(config.mcps).includes(name) ? `${name}-${Date.now()}` : name;
+      };
+
       if (serverDetail.remotes?.length) {
         const remote = serverDetail.remotes[0];
         if (remote.type === 'streamable-http' || remote.type === 'sse') {
-          const name = displayName.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-_]/g, '');
-          const finalName = Object.keys(config.mcps).includes(name) ? `${name}-${Date.now()}` : name;
+          const finalName = toFinalName(displayName);
           config.mcps[finalName] = { type: 'url', url: remote.url, enabled: true };
           saveConfig(config);
           appendLog({ type: 'install', message: 'Installed from registry', detail: `${displayName} → ${finalName}`, success: true });
@@ -710,18 +716,49 @@ async function createMcpServer(): Promise<McpServer> {
         }
       }
       if (serverDetail.packages?.length) {
-        const pkg = serverDetail.packages.find((p) => p.registryType === 'npm' && p.transport?.type === 'stdio') ?? serverDetail.packages[0];
-        if (pkg.registryType === 'npm' && pkg.transport?.type === 'stdio') {
-          const ver = pkg.version && pkg.version !== 'latest' ? `@${pkg.version}` : '';
-          const id = pkg.identifier + ver;
-          const hint = pkg.runtimeHint || 'npx';
-          const runtimeArgs = Array.isArray(pkg.runtimeArguments) ? pkg.runtimeArguments.map((a) => String(typeof a === 'object' && a && 'value' in a ? (a as { value: string }).value : a)) : ['-y'];
-          const pkgArgs = Array.isArray((pkg as { packageArguments?: unknown[] }).packageArguments) ? (pkg as { packageArguments: unknown[] }).packageArguments.map((a) => String(typeof a === 'object' && a && 'value' in a ? (a as { value: string }).value : a)) : [];
+        const npmPkg = serverDetail.packages.find((p) => p.registryType === 'npm' && p.transport?.type === 'stdio');
+        const pypiPkg = serverDetail.packages.find((p) => p.registryType === 'pypi' && p.transport?.type === 'stdio');
+
+        if (npmPkg) {
+          const ver = npmPkg.version && npmPkg.version !== 'latest' ? `@${npmPkg.version}` : '';
+          const id = npmPkg.identifier + ver;
+          const hint = npmPkg.runtimeHint || 'npx';
+          const runtimeArgs = Array.isArray(npmPkg.runtimeArguments) ? npmPkg.runtimeArguments.map((a) => String(typeof a === 'object' && a && 'value' in a ? (a as { value: string }).value : a)) : ['-y'];
+          const pkgArgs = Array.isArray((npmPkg as { packageArguments?: unknown[] }).packageArguments) ? (npmPkg as { packageArguments: unknown[] }).packageArguments.map((a) => String(typeof a === 'object' && a && 'value' in a ? (a as { value: string }).value : a)) : [];
           const args = [...runtimeArgs, id, ...pkgArgs].filter(Boolean);
           const command = hint === 'npx' ? 'npx' : hint;
-          const name = displayName.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-_]/g, '');
-          const finalName = Object.keys(config.mcps).includes(name) ? `${name}-${Date.now()}` : name;
-          config.mcps[finalName] = { type: 'stdio', command, args, enabled: true };
+          const finalName = toFinalName(displayName);
+          config.mcps[finalName] = {
+            type: 'stdio',
+            command,
+            args,
+            enabled: true,
+            ...(envOverrides && Object.keys(envOverrides).length ? { env: envOverrides } : {}),
+          };
+          saveConfig(config);
+          appendLog({ type: 'install', message: 'Installed from registry', detail: `${displayName} → ${finalName}`, success: true });
+          return { content: [{ type: 'text' as const, text: `Installed: ${finalName}` }] };
+        }
+
+        if (pypiPkg) {
+          const identifier = pypiPkg.identifier;
+          const ver = pypiPkg.version && pypiPkg.version !== 'latest' ? `==${pypiPkg.version}` : '';
+          const pkgSpec = identifier + ver;
+          const pkgArgs = Array.isArray((pypiPkg as { packageArguments?: unknown[] }).packageArguments)
+            ? (pypiPkg as { packageArguments: unknown[] }).packageArguments.map((a) =>
+                String(typeof a === 'object' && a && 'value' in a ? (a as { value: string }).value : a)
+              )
+            : [];
+          const command = 'uvx';
+          const args = [pkgSpec, ...pkgArgs].filter(Boolean);
+          const finalName = toFinalName(displayName);
+          config.mcps[finalName] = {
+            type: 'stdio',
+            command,
+            args,
+            enabled: true,
+            ...(envOverrides && Object.keys(envOverrides).length ? { env: envOverrides } : {}),
+          };
           saveConfig(config);
           appendLog({ type: 'install', message: 'Installed from registry', detail: `${displayName} → ${finalName}`, success: true });
           return { content: [{ type: 'text' as const, text: `Installed: ${finalName}` }] };

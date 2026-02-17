@@ -226,6 +226,285 @@ function hideModal() {
   document.getElementById('modal-overlay').classList.add('hidden');
 }
 
+/** Show optional env vars modal for npm install. Some packages (e.g. @iqai/mcp-telegram) need TELEGRAM_BOT_TOKEN. */
+function showNpmEnvModal(pkg, onInstall) {
+  const hint = /mcp-telegram|telegram/i.test(pkg)
+    ? 'Telegram MCPs need TELEGRAM_BOT_TOKEN from @BotFather.'
+    : 'Add env vars if this MCP needs API keys or tokens.';
+  const content = `
+    <h3>Configure env vars (optional)</h3>
+    <p class="auth-modal-intro">${escapeHtml(hint)} You can also add these later in Edit MCP → Env vars.</p>
+    <div class="form-row">
+      <label for="npm-env-json">Env vars (JSON)</label>
+      <textarea id="npm-env-json" rows="4" placeholder='{"TELEGRAM_BOT_TOKEN":"your_token_here"}' class="form-textarea"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost npm-env-skip">Skip</button>
+      <button type="button" class="btn btn-primary npm-env-install">Install</button>
+    </div>
+  `;
+  showModal(content);
+
+  const collectEnv = () => {
+    const raw = document.getElementById('npm-env-json')?.value?.trim() || '';
+    if (!raw) return {};
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  };
+
+  document.querySelector('.npm-env-install')?.addEventListener('click', () => {
+    const env = collectEnv();
+    hideModal();
+    onInstall(env);
+  });
+  document.querySelector('.npm-env-skip')?.addEventListener('click', () => {
+    hideModal();
+    onInstall({});
+  });
+}
+
+/** Extract environment_variables from a registry server (npm or pypi package). */
+function getEnvVarsFromServer(server) {
+  const packages = server?.packages || [];
+  for (const pkg of packages) {
+    const ev = pkg.environment_variables || pkg.environmentVariables;
+    if (Array.isArray(ev) && ev.length) return ev;
+  }
+  return [];
+}
+
+/** Known env vars for packages not in registry. Keys: package name (lowercase, no @) or partial match. */
+const KNOWN_ENV_VARS = {
+  'iqai/mcp-telegram': [
+    { name: 'TELEGRAM_BOT_TOKEN', description: 'Bot token from @BotFather on Telegram', is_required: true, is_secret: true },
+  ],
+  'mcp-telegram': [
+    { name: 'TELEGRAM_BOT_TOKEN', description: 'Bot token from @BotFather on Telegram', is_required: true, is_secret: true },
+  ],
+  'fast-mcp-telegram': [
+    { name: 'API_ID', description: 'From https://my.telegram.org/apps', is_required: true, is_secret: false },
+    { name: 'API_HASH', description: 'From https://my.telegram.org/apps', is_required: true, is_secret: true },
+  ],
+};
+
+function inferEnvVarsFromMcp(mcp) {
+  if (!mcp || mcp.type !== 'stdio') return [];
+  const args = mcp.args || [];
+  const pkg = args.find((a) => typeof a === 'string' && (a.includes('/') || a.includes('mcp-telegram')));
+  if (!pkg) return [];
+  const norm = pkg.replace(/^@/, '').toLowerCase();
+  if (KNOWN_ENV_VARS[norm]) return KNOWN_ENV_VARS[norm];
+  for (const [key, vars] of Object.entries(KNOWN_ENV_VARS)) {
+    if (norm.includes(key)) return vars;
+  }
+  if (/telegram/i.test(norm) || /telegram/i.test(mcp.command || '')) {
+    return KNOWN_ENV_VARS['mcp-telegram'];
+  }
+  return [];
+}
+
+async function fetchEnvSchemaFromRegistry(mcp) {
+  if (!mcp || mcp.type !== 'stdio') return [];
+  const args = mcp.args || [];
+  const pkg = args.find((a) => typeof a === 'string' && /^@?[\w.-]+\/[\w.-]+$/.test((a || '').replace(/^-y$/, '')));
+  if (!pkg) return [];
+  const search = pkg.replace(/^@/, '').replace('/', ' ');
+  try {
+    const data = await api('/registry/servers?search=' + encodeURIComponent(search) + '&limit=5');
+    const servers = data.servers || [];
+    for (const { server } of servers) {
+      const ev = getEnvVarsFromServer(server);
+      if (ev.length) return ev;
+    }
+  } catch (_) {}
+  return inferEnvVarsFromMcp(mcp);
+}
+
+function syncEnvToHiddenTextarea(container, textarea) {
+  const env = {};
+  container.querySelectorAll('input[data-env-key]').forEach((el) => {
+    const k = el.dataset.envKey;
+    const v = el.value?.trim();
+    if (k && v) env[k] = v;
+  });
+  if (textarea) textarea.value = Object.keys(env).length ? JSON.stringify(env, null, 2) : '';
+}
+
+async function renderMcpEnvSchema(mcp, mcpName, form) {
+  const container = document.getElementById('mcp-env-schema-container');
+  if (!container) return;
+  const currentEnv = (mcp?.env && typeof mcp.env === 'object') ? mcp.env : {};
+  let schema = [];
+  try {
+    schema = await fetchEnvSchemaFromRegistry(mcp);
+  } catch (_) {}
+
+  if (schema.length) {
+    container.innerHTML = schema
+      .map(
+        (v) => {
+          const name = v.name || '';
+          const desc = v.description || '';
+          const isSecret = v.is_secret ?? v.isSecret ?? false;
+          const val = currentEnv[name] || '';
+          const required = v.is_required ?? v.isRequired ? ' <span class="env-required">required</span>' : '';
+          return `
+          <div class="auth-modal-field" data-env-key="${escapeAttr(name)}">
+            <label for="mcp-env-${escapeAttr(name)}">${escapeHtml(name)}${required}</label>
+            ${desc ? `<span class="auth-modal-desc">${escapeHtml(desc)}</span>` : ''}
+            <div class="auth-modal-input-row">
+              <input type="${isSecret ? 'password' : 'text'}" id="mcp-env-${escapeAttr(name)}" data-env-key="${escapeAttr(name)}" value="${escapeAttr(val)}" placeholder="${isSecret ? 'secret:key or value' : 'value or env:VAR'}" autocomplete="${isSecret ? 'off' : 'on'}" />
+              ${isSecret ? '<button type="button" class="btn btn-ghost btn-store-secret-mcp" title="Store in Secrets">Store in Secrets</button>' : ''}
+            </div>
+          </div>`;
+        },
+      )
+      .join('');
+    const hiddenEnv = document.createElement('textarea');
+    hiddenEnv.name = 'env';
+    hiddenEnv.style.display = 'none';
+    hiddenEnv.id = 'mcp-env-json-hidden';
+    container.appendChild(hiddenEnv);
+    syncEnvToHiddenTextarea(container, hiddenEnv);
+
+    container.querySelectorAll('input[data-env-key]').forEach((el) => {
+      el.addEventListener('input', () => syncEnvToHiddenTextarea(container, document.getElementById('mcp-env-json-hidden')));
+    });
+    container.querySelectorAll('.btn-store-secret-mcp').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const field = btn.closest('.auth-modal-field');
+        const input = field?.querySelector('input');
+        const name = input?.dataset?.envKey;
+        if (!name || !input?.value?.trim()) {
+          alert('Enter a value first');
+          return;
+        }
+        const secretKey = `${(mcpName || 'mcp').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-_]/g, '')}_${name}`;
+        try {
+          await api('/secrets/' + encodeURIComponent(secretKey), {
+            method: 'PUT',
+            body: JSON.stringify({ value: input.value.trim() }),
+          });
+          input.type = 'text';
+          input.value = `secret:${secretKey}`;
+          btn.textContent = '✓ Stored';
+          btn.classList.add('stored');
+          btn.disabled = true;
+          syncEnvToHiddenTextarea(container, document.getElementById('mcp-env-json-hidden'));
+        } catch (err) {
+          alert(err?.message || 'Failed to store secret');
+        }
+      });
+    });
+  } else {
+    container.innerHTML = `
+      <div class="form-row">
+        <label>Env vars (JSON)</label>
+        <textarea name="env" rows="6" placeholder='{"KEY":"value or secret:key"}' class="form-textarea">${escapeAttr(Object.keys(currentEnv).length ? JSON.stringify(currentEnv, null, 2) : '')}</textarea>
+        <div class="form-row-hint">Add env vars as JSON. Use <code>secret:key</code> or <code>env:VAR</code> for sensitive values.</div>
+      </div>`;
+  }
+}
+
+function showAuthModal(server, title, docsUrl, onInstall, onSkip) {
+  const envVars = getEnvVarsFromServer(server);
+  if (!envVars.length) {
+    onInstall({});
+    return;
+  }
+
+  const docsHtml = docsUrl
+    ? `<p class="auth-modal-docs"><a href="${escapeAttr(docsUrl)}" target="_blank" rel="noopener noreferrer">Setup guide</a></p>`
+    : '';
+
+  const fieldsHtml = envVars
+    .map(
+      (v) => {
+        const name = v.name || '';
+        const desc = v.description || '';
+        const isSecret = v.is_secret ?? v.isSecret ?? false;
+        const inputType = isSecret ? 'password' : 'text';
+        const placeholder = v.default || (isSecret ? 'Enter value or use secret:key' : '');
+        return `
+        <div class="auth-modal-field" data-name="${escapeAttr(name)}">
+          <label for="auth-${escapeAttr(name)}">${escapeHtml(name)}</label>
+          ${desc ? `<span class="auth-modal-desc">${escapeHtml(desc)}</span>` : ''}
+          <div class="auth-modal-input-row">
+            <input type="${inputType}" id="auth-${escapeAttr(name)}" name="${escapeAttr(name)}" placeholder="${escapeAttr(placeholder)}" autocomplete="${isSecret ? 'off' : 'on'}" />
+            ${isSecret ? '<button type="button" class="btn btn-ghost btn-store-secret" title="Store value in Secrets">Store in Secrets</button>' : ''}
+          </div>
+        </div>`;
+      },
+    )
+    .join('');
+
+  const content = `
+    <h3>Configure ${escapeHtml(title)}</h3>
+    <p class="auth-modal-intro">This MCP needs the following environment variables. You can enter values now or skip and configure later in Edit MCP.</p>
+    ${docsHtml}
+    <form id="auth-modal-form" class="auth-modal-form">
+      ${fieldsHtml}
+    </form>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost auth-modal-skip">Skip for now</button>
+      <button type="button" class="btn btn-primary auth-modal-install">Install</button>
+    </div>
+  `;
+  showModal(content);
+
+  const form = document.getElementById('auth-modal-form');
+  const collectEnv = () => {
+    const env = {};
+    form.querySelectorAll('input[name]').forEach((el) => {
+      const v = el.value?.trim();
+      if (v) env[el.name] = v;
+    });
+    return env;
+  };
+
+  form.querySelectorAll('.btn-store-secret').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const field = btn.closest('.auth-modal-field');
+      const input = field?.querySelector('input');
+      const name = input?.name || input?.id?.replace(/^auth-/, '');
+      if (!name || !input?.value?.trim()) {
+        alert('Enter a value first');
+        return;
+      }
+      const secretKey = `${title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-_]/g, '')}_${name}`;
+      try {
+        await api('/secrets/' + encodeURIComponent(secretKey), {
+          method: 'PUT',
+          body: JSON.stringify({ value: input.value.trim() }),
+        });
+        input.type = 'text';
+        input.value = `secret:${secretKey}`;
+        input.readOnly = true;
+        btn.textContent = '✓ Stored';
+        btn.classList.add('stored');
+        btn.disabled = true;
+      } catch (err) {
+        alert(err?.message || 'Failed to store secret');
+      }
+    });
+  });
+
+  document.querySelector('.auth-modal-install')?.addEventListener('click', () => {
+    const env = collectEnv();
+    hideModal();
+    onInstall(env);
+  });
+
+  document.querySelector('.auth-modal-skip')?.addEventListener('click', () => {
+    hideModal();
+    onSkip();
+  });
+}
+
 function showSubdomainEditModal(mcpName, currentSubdomain, baseDomain) {
   const toValid = (s) => (s || '').toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-') || 'mcp';
   const preview = baseDomain ? `${toValid(currentSubdomain) || 'mcp'}.${baseDomain}` : '';
@@ -853,25 +1132,30 @@ async function loadDiscoverServers(search = '', append = false) {
     `;
     npmCard.querySelector('.btn-install-npm').addEventListener('click', async () => {
       const btn = npmCard.querySelector('.btn-install-npm');
-      btn.disabled = true;
-      btn.textContent = 'Installing…';
-      try {
-        const { name: installedName } = await api('/install-npm', {
-          method: 'POST',
-          body: JSON.stringify({ package: pkg }),
-        });
-        await loadConfig();
-        await loadTools();
-        renderMcpsPanel();
-        checkMcpStatus();
-        btn.textContent = 'Installed';
-        await loadLogs();
-      } catch (err) {
-        btn.disabled = false;
-        btn.textContent = 'Install';
-        await appendLogToServer('install', `Install failed: ${pkg}`, err.message);
-        alert(err.message || 'Install failed');
-      }
+      const doInstall = async (env = {}) => {
+        btn.disabled = true;
+        btn.textContent = 'Installing…';
+        try {
+          const body = { package: pkg };
+          if (Object.keys(env).length) body.env = env;
+          const { name: installedName } = await api('/install-npm', {
+            method: 'POST',
+            body: JSON.stringify(body),
+          });
+          await loadConfig();
+          await loadTools();
+          renderMcpsPanel();
+          checkMcpStatus();
+          btn.textContent = 'Installed';
+          await loadLogs();
+        } catch (err) {
+          btn.disabled = false;
+          btn.textContent = 'Install';
+          await appendLogToServer('install', `Install failed: ${pkg}`, err.message);
+          alert(err.message || 'Install failed');
+        }
+      };
+      showNpmEnvModal(pkg, doInstall);
     });
     cardsEl.insertBefore(npmCard, cardsEl.firstChild);
   }
@@ -913,22 +1197,35 @@ async function loadDiscoverServers(search = '', append = false) {
       if (!installed) {
         card.querySelector('.btn-install-mcp').addEventListener('click', async () => {
           const btn = card.querySelector('.btn-install-mcp');
-          btn.disabled = true;
-          btn.textContent = 'Installing…';
-          try {
-            const payload = JSON.parse(card.dataset.server);
-            const { name: installedName } = await api('/registry/install', { method: 'POST', body: JSON.stringify(payload) });
-            await loadConfig();
-            await loadTools();
-            renderMcpsPanel();
-            checkMcpStatus();
-            btn.textContent = 'Installed';
-            await loadLogs();
-          } catch (err) {
-            btn.disabled = false;
-            btn.textContent = 'Install';
-            await appendLogToServer('install', `Registry install failed: ${title}`, err.message);
-            alert(err.message || 'Install failed');
+          const payload = JSON.parse(card.dataset.server);
+          const server = payload.server;
+          const envVars = getEnvVarsFromServer(server);
+          const docsUrl = server?.documentation_url || server?.homepage_url || server?.website_url || '';
+
+          const doInstall = async (env = {}) => {
+            btn.disabled = true;
+            btn.textContent = 'Installing…';
+            try {
+              const body = envVars.length && Object.keys(env).length ? { ...payload, env } : payload;
+              const { name: installedName } = await api('/registry/install', { method: 'POST', body: JSON.stringify(body) });
+              await loadConfig();
+              await loadTools();
+              renderMcpsPanel();
+              checkMcpStatus();
+              btn.textContent = 'Installed';
+              await loadLogs();
+            } catch (err) {
+              btn.disabled = false;
+              btn.textContent = 'Install';
+              await appendLogToServer('install', `Registry install failed: ${title}`, err.message);
+              alert(err.message || 'Install failed');
+            }
+          };
+
+          if (envVars.length) {
+            showAuthModal(server, title, docsUrl, doInstall, () => doInstall({}));
+          } else {
+            await doInstall();
           }
         });
       }
@@ -1425,6 +1722,7 @@ function showMcpModal(existingName = null) {
         <div class="type-tabs">
           <button type="button" class="type-tab ${isUrl ? 'active' : ''}" data-type="url">URL</button>
           <button type="button" class="type-tab ${!isUrl ? 'active' : ''}" data-type="stdio">File / Stdio</button>
+          <button type="button" class="type-tab" data-type="env">Env vars</button>
         </div>
       </div>
       <div id="mcp-url-fields" style="${isUrl ? '' : 'display:none'}">
@@ -1464,6 +1762,11 @@ function showMcpModal(existingName = null) {
           <input type="text" name="cwd" value="${escapeAttr(mcp?.cwd || '')}" placeholder="Path to run command from" />
         </div>
       </div>
+      <div id="mcp-env-fields" style="display:none" data-loaded="false">
+        <div id="mcp-env-schema-container">
+          <p class="auth-modal-intro">Loading required env vars…</p>
+        </div>
+      </div>
       <div class="form-row" style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)">
         <label class="checkbox-row">
           <input type="checkbox" name="startOnStartup" ${mcp?.startOnStartup ? 'checked' : ''} />
@@ -1481,12 +1784,18 @@ function showMcpModal(existingName = null) {
 
   const form = document.getElementById('mcp-form');
   document.querySelectorAll('.type-tab').forEach((tab) => {
-    tab.addEventListener('click', () => {
+    tab.addEventListener('click', async () => {
       document.querySelectorAll('.type-tab').forEach((t) => t.classList.remove('active'));
       tab.classList.add('active');
-      const isUrl = tab.dataset.type === 'url';
-      document.getElementById('mcp-url-fields').style.display = isUrl ? 'block' : 'none';
-      document.getElementById('mcp-stdio-fields').style.display = isUrl ? 'none' : 'block';
+      const type = tab.dataset.type;
+      document.getElementById('mcp-url-fields').style.display = type === 'url' ? 'block' : 'none';
+      document.getElementById('mcp-stdio-fields').style.display = type === 'stdio' ? 'block' : 'none';
+      const envFields = document.getElementById('mcp-env-fields');
+      envFields.style.display = type === 'env' ? 'block' : 'none';
+      if (type === 'env' && envFields.dataset.loaded !== 'true') {
+        envFields.dataset.loaded = 'true';
+        await renderMcpEnvSchema(mcp, existingName, form);
+      }
     });
   });
 
@@ -1559,11 +1868,20 @@ function showMcpModal(existingName = null) {
           args = argsStr.split(',').map((s) => s.trim()).filter(Boolean);
         }
       }
+      let env;
+      try {
+        const envStr = fd.get('env')?.trim() || '';
+        env = envStr ? (JSON.parse(envStr) || {}) : undefined;
+        if (env && typeof env !== 'object') env = undefined;
+      } catch {
+        env = undefined;
+      }
       mcpConfig = {
         type: 'stdio',
         command: fd.get('command').trim() || 'node',
         args: args.length ? args : undefined,
         cwd: fd.get('cwd').trim() || undefined,
+        env: env && Object.keys(env).length ? env : undefined,
         startOnStartup: startOnStartup || undefined,
       };
     }
@@ -2576,6 +2894,8 @@ document.querySelector('.btn-logs-clear')?.addEventListener('click', async () =>
 
 async function renderSettingsPanel() {
   const serverInfoEl = document.getElementById('settings-server-info');
+  const encryptionStatusEl = document.getElementById('settings-encryption-status');
+  const setupEncryptionEl = document.getElementById('settings-setup-encryption');
   const secretsListEl = document.getElementById('settings-secrets-list');
   const tunnelTokenEl = document.getElementById('settings-tunnel-token');
   const tunnelUrlEl = document.getElementById('settings-tunnel-url');
@@ -2599,6 +2919,21 @@ async function renderSettingsPanel() {
     `;
   } catch {
     serverInfoEl.innerHTML = '<p class="settings-error">Could not load server info.</p>';
+  }
+
+  // Encryption status
+  try {
+    const enc = await api('/secrets/encryption');
+    if (enc.enabled) {
+      encryptionStatusEl.innerHTML = '<p class="settings-encryption-on"><strong>Encryption:</strong> enabled (key in OS keychain)</p>';
+      setupEncryptionEl.classList.add('hidden');
+    } else {
+      encryptionStatusEl.innerHTML = '<p class="settings-encryption-off"><strong>Encryption:</strong> not set up — secrets stored in plain text</p>';
+      setupEncryptionEl.classList.remove('hidden');
+    }
+  } catch {
+    encryptionStatusEl.innerHTML = '';
+    setupEncryptionEl.classList.add('hidden');
   }
 
   try {
@@ -2664,6 +2999,25 @@ async function renderSettingsPanel() {
 }
 
 function initSettingsPanel() {
+  document.getElementById('settings-encryption-setup')?.addEventListener('click', async () => {
+    const passEl = document.getElementById('settings-encryption-password');
+    const password = passEl?.value ?? '';
+    if (password.length < 8) {
+      alert('Password must be at least 8 characters.');
+      return;
+    }
+    try {
+      await api('/secrets/setup-encryption', {
+        method: 'POST',
+        body: JSON.stringify({ password }),
+      });
+      passEl.value = '';
+      renderSettingsPanel();
+    } catch (err) {
+      alert(err.message || 'Failed to set up encryption');
+    }
+  });
+
   document.getElementById('settings-secret-add')?.addEventListener('click', async () => {
     const keyEl = document.getElementById('settings-secret-key');
     const valueEl = document.getElementById('settings-secret-value');

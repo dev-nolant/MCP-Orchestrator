@@ -85,7 +85,19 @@ Supported formats:
 - `secret:key` — read from `mcp-orchestrator.secrets.json` (stored locally, gitignored)
 - Plain string — avoid in committed config
 
-Store a token via API: `PUT /api/secrets/:key` with `{ "value": "your-token" }`. Restrict file permissions: `chmod 600 mcp-orchestrator.secrets.json`.
+Store a token via API: `PUT /api/secrets/:key` with `{ "value": "your-token" }`.
+
+### Encrypted secrets (recommended)
+
+When a master key is available, secrets are stored **encrypted** (AES-256-GCM) in `mcp-orchestrator.secrets.json`. The key is stored in the **OS keychain** (macOS Keychain, Windows Credential Manager, Linux Secret Service)—no plain-text key file.
+
+**Install script** prompts for a password and stores the derived key in the OS keychain. No files with secrets.
+
+**Manual setup:** run `npm run setup-encryption` and enter a password (min 8 chars). Or use the Settings UI: enter a password and click "Set up encryption". Existing secrets are re-encrypted immediately.
+
+**Override:** set `MCP_ORCHESTRATOR_MASTER_KEY` (base64 32-byte key or passphrase) in your environment to use a different key than keychain.
+
+**Without master key:** falls back to legacy plain JSON. Restrict permissions: `chmod 600 mcp-orchestrator.secrets.json`.
 
 ### Tool routing: gateway vs full
 
@@ -196,6 +208,18 @@ Then open **http://mcporch.local:3847**
 ```powershell
 .\scripts\install.ps1 -Cloudflared    # Install cloudflared
 .\scripts\install.ps1 -NoCloudflared  # Skip
+```
+
+**uv** (for Python MCPs from Discover, e.g. fast-mcp-telegram): The installer prompts to install uv. To skip the prompt:
+
+```bash
+./scripts/install.sh --uv     # Install uv
+./scripts/install.sh --no-uv  # Skip (default when non-interactive)
+```
+
+```powershell
+.\scripts\install.ps1 -Uv     # Install uv
+.\scripts\install.ps1 -NoUv   # Skip
 ```
 
 **Control scripts:**

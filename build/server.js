@@ -8,11 +8,12 @@ import { startScheduler } from './scheduler.js';
 import { appendLog, getLogs, clearLogs } from './logs.js';
 import { loadConfig, saveConfig } from './config-loader.js';
 import { startOrchestratorTunnel, stopOrchestratorTunnel, getOrchestratorTunnelUrl, getOrchestratorTunnelPersisted, isCloudflareTunnelActive, isNamedTunnelConfigured, isCloudflareLoggedIn, runCloudflareLogin, getTunnelBaseDomain, } from './tunnel.js';
-import { getSecret, setSecret, deleteSecret, listSecretKeys } from './secrets.js';
+import { getSecret, setSecret, deleteSecret, listSecretKeys, generateMasterKey, isEncryptionEnabled, bootstrapSecretsFromKeychain, storeMasterKeyInKeychain, deriveKeyFromPassword, } from './secrets.js';
 import { setTunnelToken, deleteTunnelToken, generateTunnelToken, getTunnelTokenMcpNames } from './tunnel-tokens.js';
 import { handleTunnelProxy } from './tunnel-proxy.js';
 import { toTunnelSubdomain } from './config.js';
 import { installToClient, getConfigForClient, detectPlatform, } from './mcp-client-install.js';
+import { ensurePortAvailable } from './port-utils.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 process.on('uncaughtException', (err) => {
     console.error('[tunnel] Uncaught exception:', err);
@@ -35,6 +36,8 @@ process.on('unhandledRejection', (reason, promise) => {
     });
 });
 async function main() {
+    // Load master key from OS keychain into env (if not already set) before any secret access
+    bootstrapSecretsFromKeychain();
     // Apply startOnStartup: spin up MCPs that should start when the server starts
     const initialConfig = loadConfig();
     let configChanged = false;
@@ -108,7 +111,48 @@ async function main() {
             configPath: path.join(cwd, 'mcp-orchestrator.config.json'),
             secretsPath: path.join(cwd, 'mcp-orchestrator.secrets.json'),
             logsPath: path.join(cwd, 'mcp-orchestrator.logs.json'),
+            secretsEncrypted: isEncryptionEnabled(),
         });
+    });
+    app.get('/api/secrets/encryption', (_req, res) => {
+        res.json({ enabled: isEncryptionEnabled() });
+    });
+    app.post('/api/secrets/generate-master-key', (_req, res) => {
+        const key = generateMasterKey();
+        res.json({
+            key,
+            instructions: [
+                'Add to ~/.mcp-orchestrator.env:',
+                `MCP_ORCHESTRATOR_MASTER_KEY='${key}'`,
+                'Then chmod 600 ~/.mcp-orchestrator.env and restart the server.',
+            ],
+        });
+    });
+    app.post('/api/secrets/setup-encryption', (req, res) => {
+        try {
+            const { password } = (req.body || {});
+            if (!password || typeof password !== 'string' || password.length < 8) {
+                return res.status(400).json({
+                    error: 'Password required (min 8 characters). Used to derive encryption key; stored in OS keychain.',
+                });
+            }
+            storeMasterKeyInKeychain(password, true);
+            const key = deriveKeyFromPassword(password);
+            process.env.MCP_ORCHESTRATOR_MASTER_KEY = key;
+            // Force re-encrypt existing secrets
+            for (const k of listSecretKeys()) {
+                const v = getSecret(k);
+                if (v)
+                    setSecret(k, v);
+            }
+            res.json({
+                ok: true,
+                message: 'Encryption key stored in OS keychain. Existing secrets have been re-encrypted.',
+            });
+        }
+        catch (err) {
+            res.status(500).json({ error: String(err) });
+        }
     });
     app.get('/api/logs', (_req, res) => {
         res.json(getLogs());
@@ -182,18 +226,21 @@ async function main() {
     });
     app.post('/api/registry/install', (req, res) => {
         try {
-            const { server: serverDetail } = req.body;
+            const { server: serverDetail, env: envOverrides } = req.body;
             if (!serverDetail?.name) {
                 return res.status(400).json({ error: 'Missing server data' });
             }
             const displayName = serverDetail.title || serverDetail.name.split('/').pop() || serverDetail.name;
             const config = loadConfig();
+            const toFinalName = (base) => {
+                const name = base.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-_]/g, '');
+                const existing = Object.keys(config.mcps).filter((k) => k.toLowerCase() === name.toLowerCase())[0];
+                return existing || (Object.keys(config.mcps).includes(name) ? `${name}-${Date.now()}` : name);
+            };
             if (serverDetail.remotes?.length) {
                 const remote = serverDetail.remotes[0];
                 if (remote.type === 'streamable-http' || remote.type === 'sse') {
-                    const name = displayName.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-_]/g, '');
-                    const existing = Object.keys(config.mcps).filter((k) => k.toLowerCase() === name.toLowerCase())[0];
-                    const finalName = existing || (Object.keys(config.mcps).includes(name) ? `${name}-${Date.now()}` : name);
+                    const finalName = toFinalName(displayName);
                     config.mcps[finalName] = { type: 'url', url: remote.url, enabled: true };
                     saveConfig(config);
                     appendLog({
@@ -205,31 +252,54 @@ async function main() {
                 }
             }
             if (serverDetail.packages?.length) {
-                const pkg = serverDetail.packages.find((p) => p.registryType === 'npm' && p.transport?.type === 'stdio') ?? serverDetail.packages[0];
-                if (pkg.registryType === 'npm' && pkg.transport?.type === 'stdio') {
-                    const ver = pkg.version && pkg.version !== 'latest'
-                        ? `@${pkg.version}`
-                        : '';
-                    const id = pkg.identifier + ver;
-                    const hint = pkg.runtimeHint || 'npx';
-                    const runtimeArgs = Array.isArray(pkg.runtimeArguments)
-                        ? pkg.runtimeArguments.map((a) => typeof a === 'object' && a && 'value' in a ? String(a.value) : String(a))
+                const npmPkg = serverDetail.packages.find((p) => p.registryType === 'npm' && p.transport?.type === 'stdio');
+                const pypiPkg = serverDetail.packages.find((p) => p.registryType === 'pypi' && p.transport?.type === 'stdio');
+                if (npmPkg) {
+                    const ver = npmPkg.version && npmPkg.version !== 'latest' ? `@${npmPkg.version}` : '';
+                    const id = npmPkg.identifier + ver;
+                    const hint = npmPkg.runtimeHint || 'npx';
+                    const runtimeArgs = Array.isArray(npmPkg.runtimeArguments)
+                        ? npmPkg.runtimeArguments.map((a) => typeof a === 'object' && a && 'value' in a ? String(a.value) : String(a))
                         : ['-y'];
-                    const pkgArgs = Array.isArray(pkg.packageArguments)
-                        ? pkg.packageArguments.map((a) => typeof a === 'object' && a && 'value' in a ? String(a.value) : String(a))
+                    const pkgArgs = Array.isArray(npmPkg.packageArguments)
+                        ? npmPkg.packageArguments.map((a) => typeof a === 'object' && a && 'value' in a ? String(a.value) : String(a))
                         : [];
                     const args = [...runtimeArgs, id, ...pkgArgs].filter(Boolean);
-                    let command = hint;
-                    if (hint === 'npx')
-                        command = 'npx';
-                    const name = displayName.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-_]/g, '');
-                    const existing = Object.keys(config.mcps).filter((k) => k.toLowerCase() === name.toLowerCase())[0];
-                    const finalName = existing || (Object.keys(config.mcps).includes(name) ? `${name}-${Date.now()}` : name);
+                    const command = hint === 'npx' ? 'npx' : hint;
+                    const finalName = toFinalName(displayName);
                     config.mcps[finalName] = {
                         type: 'stdio',
                         command,
                         args,
                         enabled: true,
+                        ...(envOverrides && Object.keys(envOverrides).length ? { env: envOverrides } : {}),
+                    };
+                    saveConfig(config);
+                    appendLog({
+                        type: 'install',
+                        message: 'Installed MCP from registry',
+                        detail: `${displayName} → ${finalName}`,
+                    });
+                    return res.json({ ok: true, name: finalName });
+                }
+                if (pypiPkg) {
+                    const identifier = pypiPkg.identifier;
+                    const ver = pypiPkg.version && pypiPkg.version !== 'latest' ? `==${pypiPkg.version}` : '';
+                    const pkgSpec = identifier + ver;
+                    const pkgArgs = Array.isArray(pypiPkg.packageArguments)
+                        ? pypiPkg.packageArguments.map((a) => typeof a === 'object' && a && 'value' in a
+                            ? String(a.value)
+                            : String(a))
+                        : [];
+                    const command = 'uvx';
+                    const args = [pkgSpec, ...pkgArgs].filter(Boolean);
+                    const finalName = toFinalName(displayName);
+                    config.mcps[finalName] = {
+                        type: 'stdio',
+                        command,
+                        args,
+                        enabled: true,
+                        ...(envOverrides && Object.keys(envOverrides).length ? { env: envOverrides } : {}),
                     };
                     saveConfig(config);
                     appendLog({
@@ -248,7 +318,7 @@ async function main() {
     });
     app.post('/api/install-npm', (req, res) => {
         try {
-            const { package: pkg, args: extraArgs = [] } = req.body;
+            const { package: pkg, args: extraArgs = [], env: envOverrides } = req.body;
             const pkgTrim = (pkg || '').trim();
             if (!pkgTrim || !/^@?[\w.-]+\/[\w.-]+$/.test(pkgTrim.replace(/^@/, ''))) {
                 return res.status(400).json({ error: 'Invalid npm package (use format: @org/package or org/package)' });
@@ -261,8 +331,9 @@ async function main() {
             config.mcps[finalName] = {
                 type: 'stdio',
                 command: 'npx',
-                args: ['-y', withAt, ...extraArgs].filter(Boolean),
+                args: ['-y', withAt, ...(extraArgs || [])].filter(Boolean),
                 enabled: true,
+                ...(envOverrides && Object.keys(envOverrides).length ? { env: envOverrides } : {}),
             };
             saveConfig(config);
             appendLog({
@@ -701,7 +772,8 @@ async function main() {
         res.sendFile(path.join(__dirname, '../public/index.html'));
     });
     startScheduler(loadConfig());
-    const port = process.env.PORT ?? 3847;
+    const desiredPort = Number(process.env.PORT ?? 3847);
+    const port = await ensurePortAvailable(desiredPort);
     app.listen(port, () => {
         console.log(`MCP Orchestrator UI → http://localhost:${port}`);
         console.log(`  Also: http://mcporch.local:${port} (if hosts configured)`);

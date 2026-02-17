@@ -6,7 +6,9 @@
 param(
     [switch]$NoStartup,
     [switch]$Cloudflared,
-    [switch]$NoCloudflared
+    [switch]$NoCloudflared,
+    [switch]$Uv,
+    [switch]$NoUv
 )
 
 $ErrorActionPreference = "Stop"
@@ -70,6 +72,35 @@ if ($InstallCloudflared) {
     }
 }
 
+# uv install (for Python MCPs from Discover)
+$InstallUv = $null
+if ($Uv) { $InstallUv = $true }
+if ($NoUv) { $InstallUv = $false }
+if ($null -eq $InstallUv) {
+    Write-Host ""
+    Write-Host "Install uv? (enables Python MCPs from Discover, e.g. fast-mcp-telegram)" -ForegroundColor Cyan
+    Write-Host "  1) Yes"
+    Write-Host "  2) No"
+    Write-Host ""
+    $choice = Read-Host "Choice [1-2] (default: 2)"
+    if ([string]::IsNullOrWhiteSpace($choice)) { $choice = "2" }
+    $InstallUv = ($choice -eq "1")
+}
+
+if ($InstallUv) {
+    Write-Host ""
+    Write-Host "Installing uv..." -ForegroundColor Cyan
+    if (Get-Command uv -ErrorAction SilentlyContinue) {
+        Write-Host "  [OK] uv already installed" -ForegroundColor Green
+    } elseif (Get-Command winget -ErrorAction SilentlyContinue) {
+        winget install -e --id astral-sh.uv --accept-source-agreements --accept-package-agreements 2>$null
+    } elseif (Get-Command choco -ErrorAction SilentlyContinue) {
+        choco install uv -y 2>$null
+    } else {
+        Write-Host "  Install manually: https://docs.astral.sh/uv/getting-started/installation/" -ForegroundColor Yellow
+    }
+}
+
 # Add mcporch.local to hosts if missing
 $hostsContent = Get-Content $HostsPath -Raw -ErrorAction SilentlyContinue
 if ($hostsContent -match "127\.0\.0\.1\s+$Hostname") {
@@ -98,6 +129,26 @@ Set-Location $OrchDir
 npm install
 npm run build
 
+# Encrypted secrets setup (stores key in OS Credential Manager, no plain-text file)
+$InstallSecrets = $null
+if ($null -eq $InstallSecrets) {
+    Write-Host ""
+    Write-Host "Set up encrypted secrets storage? (recommended; stores key in OS Credential Manager)" -ForegroundColor Cyan
+    Write-Host "  1) Yes"
+    Write-Host "  2) No (use legacy plain secrets file)"
+    Write-Host ""
+    $choice = Read-Host "Choice [1-2] (default: 1)"
+    if ([string]::IsNullOrWhiteSpace($choice)) { $choice = "1" }
+    $InstallSecrets = ($choice -eq "1")
+}
+if ($InstallSecrets) {
+    npm run setup-encryption 2>$null
+    if ($LASTEXITCODE -eq 0) { Write-Host "  [OK] Encrypted secrets configured (key in Credential Manager)" -ForegroundColor Green }
+    else { Write-Host "  Setup failed. Run: npm run setup-encryption" -ForegroundColor Yellow }
+} else {
+    Write-Host "  Encrypted secrets: skipped" -ForegroundColor Gray
+}
+
 # Stop existing server if running
 if (Test-Path $PidFile) {
     $oldPid = Get-Content $PidFile -ErrorAction SilentlyContinue
@@ -109,7 +160,7 @@ if (Test-Path $PidFile) {
     Remove-Item $PidFile -Force -ErrorAction SilentlyContinue
 }
 
-# Start server in background
+# Start server in background (keychain is read automatically at startup)
 Write-Host "`nStarting MCP Orchestrator in background..."
 
 if (Test-Path $LogFile) { Remove-Item $LogFile -Force -ErrorAction SilentlyContinue }

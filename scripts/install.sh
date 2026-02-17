@@ -14,11 +14,14 @@ HOSTS_LINE="127.0.0.1 $HOSTNAME"
 
 NO_STARTUP=false
 INSTALL_CLOUDFLARED=""
+INSTALL_UV=""
 for arg in "$@"; do
   case "$arg" in
     --no-startup) NO_STARTUP=true ;;
     --cloudflared) INSTALL_CLOUDFLARED=yes ;;
     --no-cloudflared) INSTALL_CLOUDFLARED=no ;;
+    --uv) INSTALL_UV=yes ;;
+    --no-uv) INSTALL_UV=no ;;
   esac
 done
 
@@ -53,6 +56,29 @@ add_hosts() {
     echo "  ⚠ Could not add to /etc/hosts. You can add manually:"
     echo "    echo '$HOSTS_LINE' | sudo tee -a /etc/hosts"
     echo "  You can still use http://localhost:$PORT"
+  fi
+}
+
+# uv install (for Python MCPs from Discover)
+install_uv() {
+  if command -v uv &>/dev/null; then
+    echo "  ✓ uv already installed ($(uv --version 2>/dev/null | head -1 || echo 'uv'))"
+    return 0
+  fi
+  if [ "$(uname)" = "Darwin" ]; then
+    if command -v brew &>/dev/null; then
+      echo "  Installing uv via Homebrew..."
+      brew install uv && echo "  ✓ uv installed" || echo "  ⚠ uv install failed. Run: brew install uv"
+    else
+      echo "  ⚠ Homebrew not found. Install uv manually: curl -LsSf https://astral.sh/uv/install.sh | sh"
+    fi
+  else
+    echo "  Installing uv..."
+    if curl -LsSf https://astral.sh/uv/install.sh | sh 2>/dev/null; then
+      echo "  ✓ uv installed (add ~/.local/bin to PATH if needed)"
+    else
+      echo "  ⚠ uv install failed. Run: curl -LsSf https://astral.sh/uv/install.sh | sh"
+    fi
   fi
 }
 
@@ -103,6 +129,27 @@ if [ "$INSTALL_CLOUDFLARED" = "yes" ]; then
   install_cloudflared
 fi
 
+if [ -z "$INSTALL_UV" ]; then
+  if [ -t 0 ]; then
+    echo ""
+    echo "Install uv? (enables Python MCPs from Discover, e.g. fast-mcp-telegram)"
+    echo "  1) Yes"
+    echo "  2) No"
+    echo ""
+    read -r -p "Choice [1-2] (default: 2): " choice
+    choice="${choice:-2}"
+    [ "$choice" = "1" ] && INSTALL_UV=yes || INSTALL_UV=no
+  else
+    INSTALL_UV=no
+  fi
+fi
+
+if [ "$INSTALL_UV" = "yes" ]; then
+  echo ""
+  echo "Installing uv..."
+  install_uv
+fi
+
 # Copy example config if none exists
 CONFIG="$ORCH_DIR/mcp-orchestrator.config.json"
 EXAMPLE="$ORCH_DIR/mcp-orchestrator.config.example.json"
@@ -110,6 +157,37 @@ if [ ! -f "$CONFIG" ] && [ -f "$EXAMPLE" ]; then
   cp "$EXAMPLE" "$CONFIG"
   echo "  ✓ Created mcp-orchestrator.config.json from example"
 fi
+
+# Encrypted secrets setup (stores key in OS keychain, no plain-text file)
+setup_encrypted_secrets() {
+  if [ -z "$INSTALL_SECRETS" ]; then
+    if [ -t 0 ]; then
+      echo ""
+      echo "Set up encrypted secrets storage? (recommended; stores key in OS keychain, no plain-text file)"
+      echo "  1) Yes"
+      echo "  2) No (use legacy plain secrets file)"
+      echo ""
+      read -r -p "Choice [1-2] (default: 1): " choice
+      choice="${choice:-1}"
+      [ "$choice" = "1" ] && INSTALL_SECRETS=yes || INSTALL_SECRETS=no
+    else
+      INSTALL_SECRETS=no
+    fi
+  fi
+  if [ "$INSTALL_SECRETS" != "yes" ]; then
+    echo "  Encrypted secrets: skipped"
+    return 0
+  fi
+  cd "$ORCH_DIR"
+  if npm run setup-encryption 2>/dev/null; then
+    echo "  ✓ Encrypted secrets configured (key in OS keychain)"
+  else
+    echo "  ⚠ Setup failed. Run 'npm run setup-encryption' manually."
+  fi
+  return 0
+}
+
+setup_encrypted_secrets
 
 # Install deps and build
 echo ""
@@ -142,7 +220,7 @@ elif [ -f "$HOME/.config/systemd/user/mcp-orchestrator.service" ]; then
   systemctl --user stop mcp-orchestrator.service 2>/dev/null || true
 fi
 
-# Start server in background
+# Start server in background (keychain is read automatically at startup)
 echo ""
 echo "Starting MCP Orchestrator in background..."
 cd "$ORCH_DIR"

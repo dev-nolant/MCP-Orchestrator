@@ -199,7 +199,12 @@
               Secrets
               <span class="tooltip-wrap" title="Store tokens and API keys here. Values are saved in mcp-orchestrator.secrets.json (gitignored). Use in MCP config as secret:key (e.g. secret:OPENAI_API_KEY).">ⓘ</span>
             </h3>
-            <p class="settings-desc">Secrets are used for Bearer tokens, Cloudflare tunnel config, and MCP authorization. Never commit the secrets file.</p>
+            <p class="settings-desc">Secrets are used for Bearer tokens, Cloudflare tunnel config, and MCP authorization. When encryption is enabled, the key is stored in the OS keychain (no plain-text file).</p>
+            <div id="settings-encryption-status" class="settings-encryption-status"></div>
+            <div id="settings-setup-encryption" class="settings-setup-encryption hidden">
+              <input type="password" id="settings-encryption-password" placeholder="Password (min 8 chars)" class="settings-input" minlength="8" />
+              <button type="button" class="btn btn-primary" id="settings-encryption-setup">Set up encryption</button>
+            </div>
             <div id="settings-secrets-list" class="settings-secrets-list"></div>
             <div class="settings-add-secret">
               <input type="text" id="settings-secret-key" placeholder="Key (e.g. OPENAI_API_KEY)" class="settings-secret-key" title="Secret key name. Use env:VAR for env vars, or secret:key to reference in MCP config." />
