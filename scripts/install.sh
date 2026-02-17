@@ -109,13 +109,13 @@ install_cloudflared() {
 }
 
 if [ -z "$INSTALL_CLOUDFLARED" ]; then
-  if [ -t 0 ]; then
+  if [ -t 0 ] && [ -e /dev/tty ]; then
     echo ""
     echo "Install cloudflared? (required for Public URLs / tunnels)"
     echo "  1) Yes"
     echo "  2) No"
     echo ""
-    read -r -p "Choice [1-2] (default: 2): " choice
+    read -r -p "Choice [1-2] (default: 2): " choice < /dev/tty
     choice="${choice:-2}"
     [ "$choice" = "1" ] && INSTALL_CLOUDFLARED=yes || INSTALL_CLOUDFLARED=no
   else
@@ -130,13 +130,13 @@ if [ "$INSTALL_CLOUDFLARED" = "yes" ]; then
 fi
 
 if [ -z "$INSTALL_UV" ]; then
-  if [ -t 0 ]; then
+  if [ -t 0 ] && [ -e /dev/tty ]; then
     echo ""
     echo "Install uv? (enables Python MCPs from Discover, e.g. fast-mcp-telegram)"
     echo "  1) Yes"
     echo "  2) No"
     echo ""
-    read -r -p "Choice [1-2] (default: 2): " choice
+    read -r -p "Choice [1-2] (default: 2): " choice < /dev/tty
     choice="${choice:-2}"
     [ "$choice" = "1" ] && INSTALL_UV=yes || INSTALL_UV=no
   else
@@ -161,13 +161,13 @@ fi
 # Encrypted secrets setup (stores key in OS keychain, no plain-text file)
 setup_encrypted_secrets() {
   if [ -z "$INSTALL_SECRETS" ]; then
-    if [ -t 0 ]; then
+    if [ -t 0 ] && [ -e /dev/tty ]; then
       echo ""
       echo "Set up encrypted secrets storage? (recommended; stores key in OS keychain, no plain-text file)"
       echo "  1) Yes"
       echo "  2) No (use legacy plain secrets file)"
       echo ""
-      read -r -p "Choice [1-2] (default: 1): " choice
+      read -r -p "Choice [1-2] (default: 1): " choice < /dev/tty
       choice="${choice:-1}"
       [ "$choice" = "1" ] && INSTALL_SECRETS=yes || INSTALL_SECRETS=no
     else
