@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import open from 'open';
+import chalk from 'chalk';
 import type { OrchestratorConfig } from './config.js';
 import { listAllTools, runWorkflow } from './workflow.js';
 import { bootstrapSecretsFromKeychain } from './secrets.js';
@@ -60,7 +61,11 @@ async function apiPost(path: string, body?: unknown): Promise<unknown> {
 }
 
 async function main(): Promise<void> {
-  const [cmd, ...rest] = process.argv.slice(2);
+  const argv = process.argv.slice(2);
+  if (argv.includes('--no-color')) {
+    chalk.level = 0;
+  }
+  const [cmd, ...rest] = argv.filter((a) => a !== '--no-color');
   const configPath = rest.find((a) => a.startsWith('--config='))?.slice(9);
 
   const opts = { configPath, rest, hasHelp: rest.some((a) => a === '--help' || a === '-h') };
@@ -138,6 +143,7 @@ Commands:
 
 Options:
   --config=PATH             Config file path (default: cwd or package root)
+  --no-color                Disable colored output (for scripts/piping)
 
 Examples:
   porch workflow "Spotify to Pieces"
@@ -166,7 +172,7 @@ Examples:
   if (cmd === 'open') {
     const url = getServerUrl();
     await open(url);
-    console.log(`Opened ${url}`);
+    console.log(chalk.green('Opened'), chalk.cyan(url));
     return;
   }
 
@@ -183,12 +189,12 @@ Examples:
       if (sub === 'show') {
         const name = rest.slice(rest.indexOf('show') + 1).find((a) => !a.startsWith('--'));
         if (!name) {
-          console.error('Usage: porch workflow show <name>');
+          console.error(chalk.red('Usage: porch workflow show <name>'));
           process.exit(1);
         }
         const w = config.workflows.find((x) => x.name.toLowerCase() === name.toLowerCase()) ?? config.workflows.find((x) => x.name === name);
         if (!w) {
-          console.error(`Workflow not found: ${name}`);
+          console.error(chalk.red(`Workflow not found: ${name}`));
           process.exit(1);
         }
         console.log(JSON.stringify(w, null, 2));
@@ -196,7 +202,7 @@ Examples:
       }
       const name = sub ?? rest.find((a) => !a.startsWith('--'));
       if (!name) {
-        console.error('Usage: porch workflow <name>');
+        console.error(chalk.red('Usage: porch workflow <name>'));
         process.exit(1);
       }
       let input: Record<string, unknown> | undefined;
@@ -217,8 +223,9 @@ Examples:
       if (hasJson) {
         console.log(JSON.stringify(config.workflows, null, 2));
       } else {
+        const amber = chalk.hex('#f59e0b');
         for (const w of config.workflows) {
-          console.log(`  ${w.name}${w.description ? ` - ${w.description}` : ''}`);
+          console.log(`  ${amber(w.name)}${w.description ? chalk.dim(` - ${w.description}`) : ''}`);
         }
       }
       break;
@@ -236,15 +243,21 @@ Examples:
         try {
           const status = (await apiGet('/api/mcp-status')) as { mcps?: { name: string; status: string; tools?: number }[] };
           const mcps = status.mcps ?? [];
+          const amber = chalk.hex('#f59e0b');
           for (const m of mcps) {
             const cfg = config.mcps[m.name];
-            const enabled = cfg && (cfg as { enabled?: boolean }).enabled !== false ? '✓' : '✗';
-            console.log(`  ${enabled} ${m.name}: ${m.status}${m.tools != null ? ` (${m.tools} tools)` : ''}`);
+            const ok = cfg && (cfg as { enabled?: boolean }).enabled !== false;
+            const icon = ok ? chalk.green('✓') : chalk.red('✗');
+            const statusColor =
+              m.status === 'connected' ? chalk.green : /fail|error|disconnect/i.test(m.status) ? chalk.red : chalk.dim;
+            console.log(`  ${icon} ${amber(m.name)}: ${statusColor(m.status)}${m.tools != null ? chalk.dim(` (${m.tools} tools)`) : ''}`);
           }
         } catch {
+          const amber = chalk.hex('#f59e0b');
           for (const [n, m] of Object.entries(config.mcps)) {
-            const en = (m as { enabled?: boolean }).enabled !== false ? '✓' : '✗';
-            console.log(`  ${en} ${n} (${m.type})`);
+            const ok = (m as { enabled?: boolean }).enabled !== false;
+            const icon = ok ? chalk.green('✓') : chalk.red('✗');
+            console.log(`  ${icon} ${amber(n)} ${chalk.dim(`(${m.type})`)}`);
           }
         }
       }
@@ -254,22 +267,23 @@ Examples:
     case 'tunnel': {
       const action = rest.find((a) => !a.startsWith('--'));
       if (!action || !['status', 'start', 'stop'].includes(action)) {
-        console.error('Usage: porch tunnel status|start|stop');
+        console.error(chalk.red('Usage: porch tunnel status|start|stop'));
         process.exit(1);
       }
       try {
         if (action === 'status') {
           const s = (await apiGet('/api/tunnel/status')) as { active?: boolean; url?: string; baseUrl?: string };
-          console.log(s.active ? `Active: ${s.url ?? s.baseUrl ?? 'yes'}` : 'Inactive');
+          const url = s.url ?? s.baseUrl ?? 'yes';
+          console.log(s.active ? chalk.green('Active:') + ' ' + chalk.cyan(url) : chalk.dim('Inactive'));
         } else if (action === 'start') {
           const r = (await apiPost('/api/tunnel/start')) as { url?: string };
-          console.log(r.url ? `Tunnel started: ${r.url}` : 'Tunnel starting…');
+          console.log(r.url ? chalk.green('Tunnel started:') + ' ' + chalk.cyan(r.url) : chalk.green('Tunnel starting…'));
         } else {
           await apiPost('/api/tunnel/stop');
-          console.log('Tunnel stopped');
+          console.log(chalk.green('Tunnel stopped'));
         }
-      } catch (err) {
-        console.error('Tunnel requires server. Run: npm run ui');
+      } catch {
+        console.error(chalk.red('Tunnel requires server. Run: npm run ui'));
         process.exit(1);
       }
       break;
@@ -294,8 +308,8 @@ Examples:
       const slice = logs.slice(0, tail);
       for (const e of slice) {
         const ev = e as { ts?: string; type?: string; message?: string; success?: boolean };
-        const icon = ev.success === false ? '✗' : '✓';
-        console.log(`${icon} [${ev.ts ?? ''}] ${ev.type ?? ''}: ${ev.message ?? ''}`);
+        const icon = ev.success === false ? chalk.red('✗') : chalk.green('✓');
+        console.log(`${icon} ${chalk.dim(`[${ev.ts ?? ''}]`)} ${chalk.cyan(ev.type ?? '')}: ${ev.message ?? ''}`);
       }
       break;
     }
@@ -306,6 +320,6 @@ Examples:
 }
 
 main().catch((err) => {
-  console.error(err);
+  console.error(chalk.red(err instanceof Error ? err.message : String(err)));
   process.exit(1);
 });
