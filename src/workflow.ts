@@ -1,3 +1,4 @@
+import chalk from 'chalk';
 import type { OrchestratorConfig, Workflow, WorkflowStep } from './config.js';
 import { ensureArgsObject } from './args-wrappers.js';
 import { createMcpClient, extractTextContent } from './connector.js';
@@ -48,6 +49,25 @@ function substituteStepOutputs(
   return substituteTemplatesDeep(obj, stepOutputs, getByPath, input);
 }
 
+/** Format args for CLI display (matches website demo). */
+function formatArgsForDisplay(args: Record<string, unknown>, maxLen = 60): string {
+  const keys = Object.keys(args);
+  if (keys.length === 0) return '';
+  let str = JSON.stringify(args);
+  if (str.length > maxLen) {
+    str = str.slice(0, maxLen - 1) + '…';
+  }
+  return ' ' + chalk.dim('(' + str + ')');
+}
+
+/** Abbreviate step output for flow preview (matches website: first ~2 lines). */
+function abbreviateForFlow(text: string, maxLen = 80): string {
+  const lines = text.trim().split(/\r?\n/).filter(Boolean);
+  if (lines.length === 0) return '…';
+  const preview = lines.slice(0, 2).join(' • ');
+  return preview.length > maxLen ? preview.slice(0, maxLen - 1) + ' …' : preview;
+}
+
 export async function runWorkflow(
   config: OrchestratorConfig,
   workflowName: string,
@@ -62,6 +82,12 @@ export async function runWorkflow(
 
   const stepOutputs: string[] = [];
   const clients = new Map<string, ReturnType<typeof createMcpClient>>();
+  const amber = chalk.hex('#f59e0b');
+  const stepLabel = (n: number) => `${n}. `; // regex-friendly: /^\s*\d+\./
+  const successStyle = chalk.green;
+
+  console.log(chalk.dim(`Running: ${workflow.name}`));
+  console.log();
 
   try {
     for (let i = 0; i < workflow.steps.length; i++) {
@@ -90,6 +116,10 @@ export async function runWorkflow(
 
       const raw = substituteStepOutputs(step.args ?? {}, stepOutputs, input);
       const args = ensureArgsObject(raw);
+      const toolDisplay = `${step.mcp}.${step.tool}`;
+      const argsDisplay = formatArgsForDisplay(args);
+
+      console.log(stepLabel(i + 1) + amber(toolDisplay) + argsDisplay);
 
       try {
         const timeout =
@@ -106,14 +136,34 @@ export async function runWorkflow(
         stepOutputs.push(text);
 
         if (result.isError) {
-          console.error(`Step ${i + 1} (${step.mcp}/${step.tool}) failed:`, text);
+          console.error(chalk.red(`✗ Step ${i + 1} failed:`), text);
           return { stepOutputs, success: false };
         }
 
-        console.log(`Step ${i + 1} (${step.mcp}/${step.tool}): OK`);
+        const isLastStep = i === workflow.steps.length - 1;
+
+        if (isLastStep) {
+          const firstLine = text.trim().split(/\r?\n/)[0]?.trim() ?? '';
+          const msg =
+            firstLine.length > 0 && firstLine.length <= 60 && !firstLine.startsWith('{')
+              ? firstLine
+              : 'Done';
+          console.log(successStyle('  ✓ ') + msg);
+        } else {
+          const outputLines = text.trim().split(/\r?\n/).filter(Boolean);
+          if (outputLines.length > 0) {
+            for (const line of outputLines) {
+              console.log(chalk.dim('  ') + line);
+            }
+          }
+          console.log();
+          const preview = abbreviateForFlow(text);
+          console.log(amber('  ↓ ') + chalk.dim(preview));
+          console.log();
+        }
       } catch (stepErr) {
         const errMsg = stepErr instanceof Error ? stepErr.message : String(stepErr);
-        console.error(`Step ${i + 1} (${step.mcp}/${step.tool}) threw:`, errMsg);
+        console.error(chalk.red(`✗ Step ${i + 1} threw:`), errMsg);
         stepOutputs.push(`Error: ${errMsg}`);
         return { stepOutputs, success: false };
       }

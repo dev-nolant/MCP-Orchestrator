@@ -129,6 +129,15 @@ Set-Location $OrchDir
 npm install
 npm run build
 
+# Register porch CLI globally (porch workflow, porch list, etc.)
+npm link 2>$null | Out-Null
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "  [OK] porch CLI available (run 'porch help')" -ForegroundColor Green
+} else {
+    Write-Host "  Could not link porch. Run: cd $OrchDir; npm link" -ForegroundColor Yellow
+    Write-Host "  Or: npx porch help (from $OrchDir)" -ForegroundColor Gray
+}
+
 # Encrypted secrets setup (stores key in OS Credential Manager, no plain-text file)
 $InstallSecrets = $null
 if ($null -eq $InstallSecrets) {
@@ -202,6 +211,7 @@ if (Get-Process -Id $proc.Id -ErrorAction SilentlyContinue) {
     }
 
     Write-Host ""
+    Write-Host "CLI:    porch help   (run workflows from terminal)" -ForegroundColor Cyan
     Write-Host "To stop: .\scripts\stop.ps1"
     Write-Host "Logs:   Get-Content $LogFile -Wait -Tail 20"
     Write-Host "Errors: Get-Content $ErrFile -Wait -Tail 20"

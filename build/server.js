@@ -394,6 +394,13 @@ async function main() {
             res.status(500).json({ error: String(err) });
         }
     });
+    const CONNECT_TIMEOUT_STDIO = 4000;
+    const CONNECT_TIMEOUT_URL = 6000;
+    function getConnectTimeout(mcpConfig) {
+        return mcpConfig.type === 'url'
+            ? Math.min(mcpConfig.requestTimeout ?? CONNECT_TIMEOUT_URL, CONNECT_TIMEOUT_URL)
+            : CONNECT_TIMEOUT_STDIO;
+    }
     app.get('/api/mcp-status', async (_req, res) => {
         try {
             const config = loadConfig();
@@ -402,10 +409,7 @@ async function main() {
                 const { createMcpClient } = await import('./connector.js');
                 const { client, transport } = createMcpClient(name, mcpConfig);
                 try {
-                    const connectTimeout = mcpConfig.type === 'url'
-                        ? Math.min(mcpConfig.requestTimeout ?? 12000, 12000)
-                        : 8000;
-                    await client.connect(transport, { timeout: connectTimeout });
+                    await client.connect(transport, { timeout: getConnectTimeout(mcpConfig) });
                     const { tools } = await client.listTools();
                     return [name, { online: true, toolsCount: tools.length }];
                 }
@@ -435,27 +439,78 @@ async function main() {
             res.status(500).json({ error: String(err) });
         }
     });
+    async function checkMcpWithTimeout(name, mcpConfig) {
+        const { createMcpClient } = await import('./connector.js');
+        const { client, transport } = createMcpClient(name, mcpConfig);
+        const timeoutMs = getConnectTimeout(mcpConfig);
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error(`Connection timed out after ${timeoutMs}ms`)), timeoutMs));
+        try {
+            await Promise.race([client.connect(transport, { timeout: timeoutMs }), timeoutPromise]);
+            const { tools } = await Promise.race([
+                client.listTools(),
+                timeoutPromise,
+            ]);
+            const toolList = tools.map((t) => ({
+                name: t.name,
+                description: t.description ?? '',
+                inputSchema: t.inputSchema,
+            }));
+            return [name, { status: { online: true, toolsCount: tools.length }, tools: toolList }];
+        }
+        catch (err) {
+            return [
+                name,
+                {
+                    status: {
+                        online: false,
+                        error: err instanceof Error ? err.message : String(err),
+                    },
+                    tools: [],
+                },
+            ];
+        }
+        finally {
+            try {
+                await client.close();
+                await transport.close();
+            }
+            catch {
+                /* ignore */
+            }
+        }
+    }
+    app.get('/api/mcps-summary', async (_req, res) => {
+        try {
+            const config = loadConfig();
+            const entries = Object.entries(config.mcps).filter(([_, m]) => m.enabled !== false);
+            const results = await Promise.all(entries.map(([name, mcpConfig]) => checkMcpWithTimeout(name, mcpConfig)));
+            const status = {};
+            const toolsByMcp = {};
+            for (const [name, { status: s, tools }] of results) {
+                status[name] = s;
+                toolsByMcp[name] = tools;
+            }
+            res.json({ status, toolsByMcp });
+        }
+        catch (err) {
+            res.status(500).json({ error: String(err) });
+        }
+    });
     app.get('/api/tools', async (_req, res) => {
         try {
             const config = loadConfig();
-            const toolsByMcp = {};
-            for (const [name, mcpConfig] of Object.entries(config.mcps)) {
-                if (mcpConfig.enabled === false)
-                    continue;
+            const entries = Object.entries(config.mcps).filter(([_, m]) => m.enabled !== false);
+            const results = await Promise.all(entries.map(async ([name, mcpConfig]) => {
                 const { createMcpClient } = await import('./connector.js');
                 const { client, transport } = createMcpClient(name, mcpConfig);
                 try {
-                    await client.connect(transport);
+                    await client.connect(transport, { timeout: getConnectTimeout(mcpConfig) });
                     const { tools } = await client.listTools();
-                    toolsByMcp[name] = tools.map((t) => ({
-                        name: t.name,
-                        description: t.description ?? '',
-                        inputSchema: t.inputSchema,
-                    }));
+                    return [name, tools.map((t) => ({ name: t.name, description: t.description ?? '', inputSchema: t.inputSchema }))];
                 }
                 catch (err) {
-                    toolsByMcp[name] = [];
                     console.error(`MCP ${name} failed:`, err);
+                    return [name, []];
                 }
                 finally {
                     try {
@@ -466,8 +521,8 @@ async function main() {
                         /* ignore */
                     }
                 }
-            }
-            res.json(toolsByMcp);
+            }));
+            res.json(Object.fromEntries(results));
         }
         catch (err) {
             res.status(500).json({ error: String(err) });

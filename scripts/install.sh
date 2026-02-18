@@ -193,6 +193,14 @@ cd "$ORCH_DIR"
 npm install
 npm run build
 
+# Register porch CLI globally (porch workflow, porch list, etc.)
+if npm link 2>/dev/null; then
+  echo "  ✓ porch CLI available (run 'porch help')"
+else
+  echo "  ⚠ Could not link porch. Use: cd $ORCH_DIR && npm link"
+  echo "    Or run: npx porch help (from $ORCH_DIR)"
+fi
+
 setup_encrypted_secrets
 
 # Add hosts entry
@@ -321,6 +329,7 @@ if [ "$SERVER_OK" = true ]; then
     echo "To disable: ./scripts/disable-startup.sh"
   fi
   echo ""
+  echo "CLI:    porch help   (run workflows from terminal)"
   echo "To stop: ./scripts/stop.sh"
   echo "Logs:   tail -f $ORCH_DIR/.porch.log"
 else

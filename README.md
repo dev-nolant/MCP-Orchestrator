@@ -169,7 +169,7 @@ irm https://raw.githubusercontent.com/dev-nolant/porch/main/scripts/bootstrap.ps
 
 **Windows, skip auto-start:** `$env:NO_STARTUP=1; irm https://raw.githubusercontent.com/dev-nolant/porch/main/scripts/bootstrap.ps1 | iex`
 
-The bootstrap clones the repo to `~/porch`, runs `npm install` and `npm run build`, then starts the server. It will prompt for optional tools (uv, cloudflared) and encrypted secrets setup.
+The bootstrap clones the repo to `~/porch`, runs `npm install` and `npm run build`, registers the `porch` CLI globally, then starts the server. It will prompt for optional tools (uv, cloudflared) and encrypted secrets setup.
 
 **Non-interactive** (CI, automation, skip all prompts): `curl -sSL https://raw.githubusercontent.com/dev-nolant/porch/main/scripts/bootstrap.sh | bash`
 
@@ -275,6 +275,7 @@ cd ~\porch
 This stops the server and removes the scheduled task.
 
 **Optional cleanup:**
+- Remove the `porch` CLI: `npm unlink -g porch`
 - Remove `127.0.0.1 porch.local` from your hosts file (`/etc/hosts` on Mac/Linux, `C:\Windows\System32\drivers\etc\hosts` on Windows).
 - Delete the project folder: `rm -rf ~/porch` (Mac/Linux) or remove `~\porch` (Windows).
 
@@ -286,6 +287,8 @@ If you used a custom install location, run the scripts from that directory inste
 npm run ui
 # → http://localhost:3847
 ```
+
+Or `porch open` to open the UI in your browser (requires server running).
 
 The UI lets you:
 
@@ -300,10 +303,25 @@ Config is saved to `porch.config.json` in the project directory.
 
 ## CLI
 
+After install, the `porch` command is available globally. Or use `npm run` from the project dir.
+
 ```bash
-npm run list
-npm run workflow -- "Spotify to Pieces"
+porch help                    # List all commands
+porch list                    # List tools from all MCPs
+porch workflow "Spotify to Pieces"
+porch workflow show "Spotify to Pieces"   # Show workflow config
+porch workflows [--json]      # List workflows
+porch mcps [--json]           # List MCPs + status
+porch tunnel status|start|stop
+porch logs [--tail=N]         # Recent logs
+porch open                    # Open UI in browser
 ```
+
+**Options:** `--config=PATH` for custom config. Config is searched in: cwd, package root, or `--config=` path.
+
+**Workflow input:** `porch workflow "Start Study" --input='{"subject":"math"}'` or `--input=@input.json`
+
+**Manual (no global install):** `npm run list` and `npm run workflow -- "Spotify to Pieces"`
 
 ## Run every 30 mins (optional)
 
@@ -311,7 +329,7 @@ To sync Spotify → Pieces automatically every 30 minutes:
 
 **Cron:**
 ```cron
-*/30 * * * * cd /path/to/porch && npm run workflow -- "Spotify to Pieces"
+*/30 * * * * cd /path/to/porch && porch workflow "Spotify to Pieces"
 ```
 
 ## Connect (MCP Client Setup)
