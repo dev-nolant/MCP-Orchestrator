@@ -26,7 +26,7 @@ Write-Host "Porch installer" -ForegroundColor Cyan
 Write-Host "==============="
 Write-Host ""
 Write-Host "  https://porch.sh - " -NoNewline -ForegroundColor Gray
-Write-Host "https://github.com/porch-sh/porch" -ForegroundColor DarkGray
+Write-Host "https://github.com/dev-nolant/porch" -ForegroundColor DarkGray
 Write-Host ""
 
 # Check Node.js

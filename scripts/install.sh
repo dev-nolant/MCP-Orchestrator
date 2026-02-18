@@ -28,7 +28,7 @@ done
 echo "Porch installer"
 echo "==============="
 echo ""
-echo "  https://porch.sh — https://github.com/porch-sh/porch"
+echo "  https://porch.sh — https://github.com/dev-nolant/porch"
 echo ""
 
 # Check Node.js

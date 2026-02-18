@@ -1,16 +1,16 @@
 # Bootstrap: clone repo and run installer. Use with irm for one-line install.
 # One-liner (Windows PowerShell):
-#   irm https://raw.githubusercontent.com/porch-sh/porch/main/scripts/bootstrap.ps1 | iex
+#   irm https://raw.githubusercontent.com/dev-nolant/porch/main/scripts/bootstrap.ps1 | iex
 #
 # With -NoStartup: $env:NO_STARTUP=1; irm ... | iex
 
 $ErrorActionPreference = "Stop"
-$GithubRepo = if ($env:GITHUB_REPO) { $env:GITHUB_REPO } else { "https://github.com/porch-sh/porch.git" }
+$GithubRepo = if ($env:GITHUB_REPO) { $env:GITHUB_REPO } else { "https://github.com/dev-nolant/porch.git" }
 $Dest = if ($env:DEST) { $env:DEST } else { Join-Path $env:USERPROFILE "porch" }
 $Subdir = if ($env:SUBDIR) { $env:SUBDIR } else { "" }
 
 Write-Host "Porch — bootstrap" -ForegroundColor Cyan
-Write-Host "  https://porch.sh — https://github.com/porch-sh/porch" -ForegroundColor DarkGray
+Write-Host "  https://porch.sh — https://github.com/dev-nolant/porch" -ForegroundColor DarkGray
 Write-Host "Cloning to $Dest ..."
 
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
