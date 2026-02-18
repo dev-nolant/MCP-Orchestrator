@@ -14,6 +14,8 @@
 
 Your MCPs don't talk to each other. Porch discovers and installs MCPs from npm and PyPI, connects them by URL or stdio, chains their tools in workflows, tunnels any MCP to the internet (quick or named, per-MCP tokens), and lets your favorite LLM add MCPs, build workflows, manage the tunnel, and run it all from chat. Web UI, Easy Install for Cursor, Claude, Windsurf, and Continue, CLI, one-command bootstrap with auto-start.
 
+**[porch.sh](https://porch.sh)** — Site with docs, setup guides, and install instructions.
+
 ## Table of Contents
 
 - [Setup](#setup)
@@ -288,7 +290,7 @@ npm run ui
 # → http://localhost:3847
 ```
 
-Or `porch open` to open the UI in your browser (requires server running).
+Or `porch open` to open the UI in your browser (requires server running). The dashboard footer has **Docs** and **View on GitHub** links.
 
 The UI lets you:
 

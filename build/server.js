@@ -100,6 +100,17 @@ async function main() {
     app.all('/tunnel/:mcpName', tunnelProxyHandler);
     app.all('/tunnel/:mcpName/*', tunnelProxyHandler);
     app.use(express.json());
+    // Health check for local frontend to detect if Porch is running (CORS allowed)
+    app.get('/api/health', (_req, res) => {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.json({ ok: true });
+    });
+    app.options('/api/health', (_req, res) => {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+        res.setHeader('Access-Control-Max-Age', '86400');
+        res.sendStatus(204);
+    });
     app.get('/api/config', (_req, res) => {
         res.json(loadConfig());
     });

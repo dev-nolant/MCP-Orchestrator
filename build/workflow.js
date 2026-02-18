@@ -156,18 +156,19 @@ export async function runWorkflow(config, workflowName, input) {
     }
 }
 export async function listAllTools(config) {
+    const amber = chalk.hex('#f59e0b');
     for (const [name, mcpConfig] of Object.entries(config.mcps)) {
         const { client, transport } = createMcpClient(name, mcpConfig);
         try {
             await client.connect(transport);
             const { tools } = await client.listTools();
-            console.log(`\n## ${name}`);
+            console.log('\n' + amber.bold(`## ${name}`));
             for (const tool of tools) {
-                console.log(`  - ${tool.name}: ${tool.description ?? '(no description)'}`);
+                console.log(chalk.dim('  - ') + chalk.cyan(tool.name) + chalk.dim(`: ${tool.description ?? '(no description)'}`));
             }
         }
         catch (err) {
-            console.error(`\n## ${name}: FAILED - ${err}`);
+            console.error('\n' + chalk.red(`## ${name}: FAILED - ${err}`));
         }
         finally {
             try {
