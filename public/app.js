@@ -629,9 +629,9 @@ function hideLogsPanel() {
   document.body.style.overflow = '';
 }
 
-const TAB_STORAGE_KEY = 'mcp-orchestrator-tab';
-const MCP_SUB_STORAGE_KEY = 'mcp-orchestrator-mcp-sub';
-const MCP_VIEW_KEY = 'mcp-orchestrator-mcp-view';
+const TAB_STORAGE_KEY = 'porch-tab';
+const MCP_SUB_STORAGE_KEY = 'porch-mcp-sub';
+const MCP_VIEW_KEY = 'porch-mcp-view';
 const VALID_TABS = ['mcps', 'workflows', 'schedule', 'run', 'tunnel', 'connect', 'settings'];
 
 function activateMainTab(tabId) {
@@ -1522,7 +1522,7 @@ async function renderConnectPanel() {
           mac: '~/Library/Application Support/Claude/claude_desktop_config.json',
           windows: '%APPDATA%\\Claude\\claude_desktop_config.json',
           linux: '~/.config/Claude/claude_desktop_config.json',
-          steps: ['Claude Desktop uses stdio only—we use a bridge (npx @pyroprompts/mcp-stdio-to-streamable-http-adapter)', 'Restart Claude Desktop completely after saving', 'Ensure MCP Orchestrator is running before opening Claude'],
+          steps: ['Claude Desktop uses stdio only—we use a bridge (npx @pyroprompts/mcp-stdio-to-streamable-http-adapter)', 'Restart Claude Desktop completely after saving', 'Ensure Porch is running before opening Claude'],
         },
         windsurf: {
           mac: '~/.codeium/windsurf/mcp_config.json',
@@ -1638,7 +1638,7 @@ function initTunnelPanel() {
   domainSaveBtn?.addEventListener('click', async () => {
     const domain = domainInput?.value?.trim();
     if (!domain) {
-      alert('Enter a domain (e.g. mcp.example.com)');
+      alert('Enter a domain (e.g. porch.sh)');
       return;
     }
     try {
@@ -2878,7 +2878,7 @@ document.querySelector('.btn-logs-download')?.addEventListener('click', async ()
   const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `mcp-orchestrator-logs-${new Date().toISOString().slice(0, 10)}.json`;
+  a.download = `porch-logs-${new Date().toISOString().slice(0, 10)}.json`;
   a.click();
   URL.revokeObjectURL(a.href);
 });
@@ -2905,7 +2905,7 @@ async function renderSettingsPanel() {
     const info = await api('/server-info');
     serverInfoEl.innerHTML = `
       <dl class="settings-dl">
-        <dt title="Port the MCP Orchestrator server listens on (set via PORT env var)">Port</dt>
+        <dt title="Port the Porch server listens on (set via PORT env var)">Port</dt>
         <dd><code>${escapeHtml(String(info.port))}</code></dd>
         <dt title="Directory where config and secrets files are stored">Working directory</dt>
         <dd><code>${escapeHtml(info.cwd)}</code></dd>
@@ -2986,14 +2986,14 @@ async function renderSettingsPanel() {
     await api('/secrets/cloudflare_tunnel_public_url');
     tunnelUrlEl.placeholder = '●●●●●●●● (enter new value to replace)';
   } catch {
-    tunnelUrlEl.placeholder = 'https://mcp.example.com';
+    tunnelUrlEl.placeholder = 'https://mcp.porch.sh';
   }
   if (tunnelDomainEl) {
     try {
       await api('/secrets/cloudflare_tunnel_domain');
       tunnelDomainEl.placeholder = '●●●●●●●● (enter new value to replace)';
     } catch {
-      tunnelDomainEl.placeholder = 'mcp.example.com';
+      tunnelDomainEl.placeholder = 'porch.sh';
     }
   }
 }

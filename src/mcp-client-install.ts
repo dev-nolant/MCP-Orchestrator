@@ -10,7 +10,7 @@ import * as os from 'node:os';
 export type Platform = 'mac' | 'windows' | 'linux';
 export type Client = 'cursor' | 'claude-desktop' | 'windsurf' | 'continue';
 
-const ENTRY_NAME = 'mcp-orchestrator';
+const ENTRY_NAME = 'porch';
 
 interface PathInfo {
   path: string;
@@ -70,7 +70,7 @@ function getBridgeCommand(orchestratorDir: string): { command: string; args: str
   return {
     command: 'node',
     args: [bridgePath],
-    env: { MCP_ORCHESTRATOR_URI: url, MCP_NAME: ENTRY_NAME },
+    env: { PORCH_URI: url, MCP_ORCHESTRATOR_URI: url, MCP_NAME: ENTRY_NAME },
   };
 }
 

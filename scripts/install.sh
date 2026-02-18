@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# MCP Orchestrator — Mac & Linux installer
-# Adds mcporch.local to hosts, installs deps, starts server in background
+# Porch — Mac & Linux installer
+# Adds porch.local to hosts, installs deps, starts server in background
 # Optional: sets up auto-start when PC boots (use --no-startup to skip)
 
 set -e
 
-HOSTNAME="mcporch.local"
+HOSTNAME="porch.local"
 PORT="${PORT:-3847}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ORCH_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-PID_FILE="$ORCH_DIR/.mcp-orchestrator.pid"
+PID_FILE="$ORCH_DIR/.porch.pid"
 HOSTS_LINE="127.0.0.1 $HOSTNAME"
 
 NO_STARTUP=false
@@ -25,12 +25,13 @@ for arg in "$@"; do
   esac
 done
 
-echo "MCP Orchestrator installer"
-echo "=========================="
+echo "Porch installer"
+echo "==============="
 echo ""
-echo "  Created and maintained by Nolan Taft — https://github.com/dev-nolant/MCP-Orchestrator"
+echo "  https://porch.sh — https://github.com/porch-sh/porch"
 echo ""
 
+# Check Node.js
 if ! command -v node &>/dev/null; then
   echo "Error: Node.js is required. Install from https://nodejs.org"
   exit 1
@@ -42,13 +43,14 @@ if [ "$NODE_VER" -lt 18 ] 2>/dev/null; then
   exit 1
 fi
 
+# Add porch.local to hosts if missing
 add_hosts() {
   if grep -qE "127\.0\.0\.1[[:space:]]+${HOSTNAME}" /etc/hosts 2>/dev/null; then
     echo "  ✓ $HOSTNAME already in /etc/hosts"
     return 0
   fi
   echo "  Adding $HOSTNAME to /etc/hosts (requires sudo)..."
-  if printf '\n# MCP Orchestrator\n%s\n' "$HOSTS_LINE" | sudo tee -a /etc/hosts >/dev/null 2>&1; then
+  if printf '\n# Porch\n%s\n' "$HOSTS_LINE" | sudo tee -a /etc/hosts >/dev/null 2>&1; then
     echo "  ✓ Added $HOSTNAME to /etc/hosts"
   else
     echo "  ⚠ Could not add to /etc/hosts. You can add manually:"
@@ -57,6 +59,7 @@ add_hosts() {
   fi
 }
 
+# uv install (for Python MCPs from Discover)
 install_uv() {
   if command -v uv &>/dev/null; then
     echo "  ✓ uv already installed ($(uv --version 2>/dev/null | head -1 || echo 'uv'))"
@@ -79,6 +82,7 @@ install_uv() {
   fi
 }
 
+# Cloudflared install (for Public URLs / tunnels)
 install_cloudflared() {
   if command -v cloudflared &>/dev/null; then
     echo "  ✓ cloudflared already installed ($(cloudflared --version 2>/dev/null | head -1 || echo 'cloudflared'))"
@@ -146,13 +150,15 @@ if [ "$INSTALL_UV" = "yes" ]; then
   install_uv
 fi
 
-CONFIG="$ORCH_DIR/mcp-orchestrator.config.json"
-EXAMPLE="$ORCH_DIR/mcp-orchestrator.config.example.json"
+# Copy example config if none exists
+CONFIG="$ORCH_DIR/porch.config.json"
+EXAMPLE="$ORCH_DIR/porch.config.example.json"
 if [ ! -f "$CONFIG" ] && [ -f "$EXAMPLE" ]; then
   cp "$EXAMPLE" "$CONFIG"
-  echo "  ✓ Created mcp-orchestrator.config.json from example"
+  echo "  ✓ Created porch.config.json from example"
 fi
 
+# Encrypted secrets setup (stores key in OS keychain, no plain-text file)
 setup_encrypted_secrets() {
   if [ -z "$INSTALL_SECRETS" ]; then
     if [ -t 0 ] && [ -e /dev/tty ]; then
@@ -189,10 +195,12 @@ npm run build
 
 setup_encrypted_secrets
 
+# Add hosts entry
 echo ""
 echo "Configuring $HOSTNAME..."
 add_hosts
 
+# Stop existing server if running
 if [ -f "$PID_FILE" ]; then
   OLD_PID=$(cat "$PID_FILE")
   if kill -0 "$OLD_PID" 2>/dev/null; then
@@ -204,22 +212,34 @@ if [ -f "$PID_FILE" ]; then
   rm -f "$PID_FILE"
 fi
 
-if [ "$(uname)" = "Darwin" ] && [ -f "$HOME/Library/LaunchAgents/com.mcp-orchestrator.server.plist" ]; then
-  launchctl bootout "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.mcp-orchestrator.server.plist" 2>/dev/null || true
-elif [ -f "$HOME/.config/systemd/user/mcp-orchestrator.service" ]; then
-  systemctl --user stop mcp-orchestrator.service 2>/dev/null || true
+# Unload launchd/systemd if present (we'll re-install)
+if [ "$(uname)" = "Darwin" ]; then
+  for plist in "$HOME/Library/LaunchAgents/com.porch.server.plist" "$HOME/Library/LaunchAgents/com.mcp-orchestrator.server.plist"; do
+    if [ -f "$plist" ]; then
+      launchctl bootout "gui/$(id -u)" "$plist" 2>/dev/null || true
+      break
+    fi
+  done
+else
+  for svc in porch.service mcp-orchestrator.service; do
+    if [ -f "$HOME/.config/systemd/user/$svc" ]; then
+      systemctl --user stop "$svc" 2>/dev/null || true
+      break
+    fi
+  done
 fi
 
+# Start server in background (keychain is read automatically at startup)
 echo ""
-echo "Starting MCP Orchestrator in background..."
+echo "Starting Porch in background..."
 cd "$ORCH_DIR"
 
 if [ "$NO_STARTUP" = true ]; then
-  nohup node build/server.js > "$ORCH_DIR/.mcp-orchestrator.log" 2>&1 &
+  nohup node build/server.js > "$ORCH_DIR/.porch.log" 2>&1 &
   echo $! > "$PID_FILE"
 else
   if [ "$(uname)" = "Darwin" ]; then
-    PLIST="$HOME/Library/LaunchAgents/com.mcp-orchestrator.server.plist"
+    PLIST="$HOME/Library/LaunchAgents/com.porch.server.plist"
     mkdir -p "$(dirname "$PLIST")"
     cat > "$PLIST" << PLISTEOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -227,7 +247,7 @@ else
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.mcp-orchestrator.server</string>
+  <string>com.porch.server</string>
   <key>ProgramArguments</key>
   <array>
     <string>$(command -v node)</string>
@@ -240,9 +260,9 @@ else
   <key>KeepAlive</key>
   <false/>
   <key>StandardOutPath</key>
-  <string>$ORCH_DIR/.mcp-orchestrator.log</string>
+  <string>$ORCH_DIR/.porch.log</string>
   <key>StandardErrorPath</key>
-  <string>$ORCH_DIR/.mcp-orchestrator.log</string>
+  <string>$ORCH_DIR/.porch.log</string>
 </dict>
 </plist>
 PLISTEOF
@@ -250,9 +270,9 @@ PLISTEOF
   else
     SYSTEMD_USER="$HOME/.config/systemd/user"
     mkdir -p "$SYSTEMD_USER"
-    cat > "$SYSTEMD_USER/mcp-orchestrator.service" << SVCEOF
+    cat > "$SYSTEMD_USER/porch.service" << SVCEOF
 [Unit]
-Description=MCP Orchestrator
+Description=Porch
 After=network.target
 
 [Service]
@@ -260,15 +280,15 @@ Type=simple
 ExecStart=$(command -v node) build/server.js
 WorkingDirectory=$ORCH_DIR
 Restart=on-failure
-StandardOutput=append:$ORCH_DIR/.mcp-orchestrator.log
-StandardError=append:$ORCH_DIR/.mcp-orchestrator.log
+StandardOutput=append:$ORCH_DIR/.porch.log
+StandardError=append:$ORCH_DIR/.porch.log
 
 [Install]
 WantedBy=default.target
 SVCEOF
     systemctl --user daemon-reload
-    systemctl --user enable mcp-orchestrator.service
-    systemctl --user start mcp-orchestrator.service
+    systemctl --user enable porch.service
+    systemctl --user start porch.service
   fi
 fi
 
@@ -277,9 +297,9 @@ SERVER_OK=false
 if [ "$NO_STARTUP" = true ]; then
   if kill -0 $(cat "$PID_FILE") 2>/dev/null; then SERVER_OK=true; fi
 elif [ "$(uname)" = "Darwin" ]; then
-  launchctl list 2>/dev/null | grep -q com.mcp-orchestrator.server && SERVER_OK=true
+  launchctl list 2>/dev/null | grep -q com.porch.server && SERVER_OK=true
 else
-  systemctl --user is-active mcp-orchestrator.service &>/dev/null && SERVER_OK=true
+  systemctl --user is-active porch.service &>/dev/null && SERVER_OK=true
 fi
 
 if [ "$SERVER_OK" = true ]; then
@@ -302,9 +322,9 @@ if [ "$SERVER_OK" = true ]; then
   fi
   echo ""
   echo "To stop: ./scripts/stop.sh"
-  echo "Logs:   tail -f $ORCH_DIR/.mcp-orchestrator.log"
+  echo "Logs:   tail -f $ORCH_DIR/.porch.log"
 else
-  echo "  ⚠ Server may have failed to start. Check: $ORCH_DIR/.mcp-orchestrator.log"
+  echo "  ⚠ Server may have failed to start. Check: $ORCH_DIR/.porch.log"
   rm -f "$PID_FILE"
   exit 1
 fi

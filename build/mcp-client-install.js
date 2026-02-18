@@ -5,7 +5,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-const ENTRY_NAME = 'mcp-orchestrator';
+const ENTRY_NAME = 'porch';
 function getConfigPaths(platform) {
     const home = os.homedir();
     const appData = process.env.APPDATA || path.join(home, 'AppData', 'Roaming');
@@ -52,7 +52,7 @@ function getBridgeCommand(orchestratorDir) {
     return {
         command: 'node',
         args: [bridgePath],
-        env: { MCP_ORCHESTRATOR_URI: url, MCP_NAME: ENTRY_NAME },
+        env: { PORCH_URI: url, MCP_ORCHESTRATOR_URI: url, MCP_NAME: ENTRY_NAME },
     };
 }
 function getCursorConfig(orchestratorUrl) {

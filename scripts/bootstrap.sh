@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
 # Bootstrap: clone repo and run installer. Use with curl for one-line install.
 # One-liner (Mac/Linux):
-#   curl -sSL https://raw.githubusercontent.com/dev-nolant/MCP-Orchestrator/main/scripts/bootstrap.sh | bash
+#   curl -sSL https://raw.githubusercontent.com/porch-sh/porch/main/scripts/bootstrap.sh | bash
 #
 # With --no-startup:
-#   curl -sSL https://raw.githubusercontent.com/dev-nolant/MCP-Orchestrator/main/scripts/bootstrap.sh | bash -s -- --no-startup
+#   curl -sSL https://raw.githubusercontent.com/porch-sh/porch/main/scripts/bootstrap.sh | bash -s -- --no-startup
 #
-# For monorepo (mcp-orchestrator as subdir): set SUBDIR=mcp-orchestrator
+# For monorepo (porch as subdir): set SUBDIR=porch
 
 set -e
 
-GITHUB_REPO="${GITHUB_REPO:-https://github.com/dev-nolant/MCP-Orchestrator.git}"
-DEST="${DEST:-$HOME/mcp-orchestrator}"
+GITHUB_REPO="${GITHUB_REPO:-https://github.com/porch-sh/porch.git}"
+DEST="${DEST:-$HOME/porch}"
 SUBDIR="${SUBDIR:-}"
 
-echo "MCP Orchestrator — bootstrap"
-echo "  Created and maintained by Nolan Taft — https://github.com/dev-nolant/MCP-Orchestrator"
+echo "Porch — bootstrap"
+echo "  https://porch.sh — https://github.com/porch-sh/porch"
 echo "Cloning to $DEST ..."
 
 if [ -d "$DEST" ]; then

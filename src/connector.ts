@@ -28,7 +28,7 @@ export function createMcpClient(name: string, config: McpConfig): {
       requestInit,
     });
     const client = new Client(
-      { name: `mcp-orchestrator-${name}`, version: '0.1.0' },
+      { name: `porch-${name}`, version: '0.1.0' },
       {},
     );
     return { client, transport };
@@ -44,7 +44,7 @@ export function createMcpClient(name: string, config: McpConfig): {
       env: Object.keys(resolvedEnv).length ? resolvedEnv : undefined,
     });
     const client = new Client(
-      { name: `mcp-orchestrator-${name}`, version: '0.1.0' },
+      { name: `porch-${name}`, version: '0.1.0' },
       {},
     );
     return { client, transport };

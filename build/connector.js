@@ -22,7 +22,7 @@ export function createMcpClient(name, config) {
         const transport = new StreamableHTTPClientTransport(new URL(config.url), {
             requestInit,
         });
-        const client = new Client({ name: `mcp-orchestrator-${name}`, version: '0.1.0' }, {});
+        const client = new Client({ name: `porch-${name}`, version: '0.1.0' }, {});
         return { client, transport };
     }
     if (config.type === 'stdio') {
@@ -34,7 +34,7 @@ export function createMcpClient(name, config) {
             cwd: config.cwd,
             env: Object.keys(resolvedEnv).length ? resolvedEnv : undefined,
         });
-        const client = new Client({ name: `mcp-orchestrator-${name}`, version: '0.1.0' }, {});
+        const client = new Client({ name: `porch-${name}`, version: '0.1.0' }, {});
         return { client, transport };
     }
     throw new Error(`Unknown MCP config type: ${config.type}`);

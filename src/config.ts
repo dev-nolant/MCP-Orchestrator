@@ -29,7 +29,7 @@ export interface McpConfigUrl extends McpProxyOptions {
   /**
    * Bearer token for Authorization header. Prefer using env or secrets:
    * - "env:VAR_NAME" → read from process.env.VAR_NAME
-   * - "secret:key" → read from mcp-orchestrator.secrets.json
+   * - "secret:key" → read from porch.secrets.json
    * - plain string (avoid in committed config)
    */
   authorizationToken?: string;

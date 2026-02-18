@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const MAX_LOGS = 500;
-const LOGS_PATH = path.join(process.cwd(), 'mcp-orchestrator.logs.json');
+const LOGS_PATH = path.join(process.cwd(), 'porch.logs.json');
+const LEGACY_LOGS_PATH = path.join(process.cwd(), 'mcp-orchestrator.logs.json');
 
 export type LogEntry = {
   id: string;
@@ -21,17 +22,24 @@ function genId(): string {
 }
 
 function loadFromDisk(): void {
-  try {
-    if (fs.existsSync(LOGS_PATH)) {
-      const raw = fs.readFileSync(LOGS_PATH, 'utf8');
-      const parsed = JSON.parse(raw) as LogEntry[];
-      if (Array.isArray(parsed)) {
-        entries.length = 0;
-        entries.push(...parsed.slice(0, MAX_LOGS));
+  const paths = [LOGS_PATH, LEGACY_LOGS_PATH];
+  for (const p of paths) {
+    try {
+      if (fs.existsSync(p)) {
+        const raw = fs.readFileSync(p, 'utf8');
+        const parsed = JSON.parse(raw) as LogEntry[];
+        if (Array.isArray(parsed)) {
+          entries.length = 0;
+          entries.push(...parsed.slice(0, MAX_LOGS));
+        }
+        if (p === LEGACY_LOGS_PATH) {
+          fs.writeFileSync(LOGS_PATH, JSON.stringify(entries, null, 2), 'utf8');
+        }
+        return;
       }
+    } catch {
+      /* ignore corruption, try next */
     }
-  } catch {
-    /* ignore corruption, start fresh */
   }
 }
 

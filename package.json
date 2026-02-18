@@ -1,11 +1,11 @@
 {
-  "name": "mcp-orchestrator",
+  "name": "porch",
   "version": "0.1.0",
   "type": "module",
   "description": "Connect MCPs locally and automate actions between them",
   "main": "build/index.js",
   "bin": {
-    "mcp-orchestrator": "./build/index.js"
+    "porch": "./build/index.js"
   },
   "scripts": {
     "build": "npx tsc",

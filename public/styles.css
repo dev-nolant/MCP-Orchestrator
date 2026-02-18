@@ -134,12 +134,18 @@ body {
 
 .tabs {
   display: flex;
+  flex-wrap: nowrap;
   gap: 0;
   margin-top: 0.75rem;
   border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
 }
 
 .tab {
+  flex-shrink: 0;
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
@@ -160,6 +166,29 @@ body {
 .tab.active {
   color: var(--accent);
   border-bottom-color: var(--accent);
+}
+
+/* Scrollbar styling for horizontal tab nav */
+.tabs::-webkit-scrollbar,
+.mcp-sub-tabs::-webkit-scrollbar,
+.mcp-wiki-tabs::-webkit-scrollbar {
+  height: 5px;
+}
+.tabs::-webkit-scrollbar-track,
+.mcp-sub-tabs::-webkit-scrollbar-track,
+.mcp-wiki-tabs::-webkit-scrollbar-track {
+  background: transparent;
+}
+.tabs::-webkit-scrollbar-thumb,
+.mcp-sub-tabs::-webkit-scrollbar-thumb,
+.mcp-wiki-tabs::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+.tabs::-webkit-scrollbar-thumb:hover,
+.mcp-sub-tabs::-webkit-scrollbar-thumb:hover,
+.mcp-wiki-tabs::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }
 
 .panel {
@@ -596,12 +625,18 @@ body {
 
 .mcp-sub-tabs {
   display: flex;
+  flex-wrap: nowrap;
   gap: 0;
   border-bottom: 1px solid var(--border);
   margin-bottom: 1rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
 }
 
 .mcp-sub-tab {
+  flex-shrink: 0;
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
@@ -1723,13 +1758,19 @@ body {
 
 .mcp-wiki-tabs {
   display: flex;
+  flex-wrap: nowrap;
   gap: 0.25rem;
   padding: 0 1.5rem;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
 }
 
 .mcp-wiki-tab {
+  flex-shrink: 0;
   padding: 0.75rem 1rem;
   font-size: 0.9rem;
   font-weight: 500;

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Update MCP Orchestrator: git pull, npm install, npm run build, restart server
+# Update Porch: git pull, npm install, npm run build, restart server
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ORCH_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-echo "MCP Orchestrator — updater"
+echo "Porch — updater"
 echo "=========================="
 
 # Find git root (handles monorepo)

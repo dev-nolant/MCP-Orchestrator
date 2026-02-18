@@ -1,5 +1,5 @@
-# MCP Orchestrator — Windows installer
-# Adds mcporch.local to hosts, installs deps, starts server in background
+# Porch — Windows installer
+# Adds porch.local to hosts, installs deps, starts server in background
 # Optional: auto-start when PC boots (use -NoStartup to skip)
 # Run in PowerShell (as Administrator for hosts file): .\scripts\install.ps1 [-NoStartup]
 
@@ -12,21 +12,21 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$Hostname = "mcporch.local"
+$Hostname = "porch.local"
 $Port = if ($env:PORT) { $env:PORT } else { "3847" }
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $OrchDir = Split-Path -Parent $ScriptDir
-$PidFile = Join-Path $OrchDir ".mcp-orchestrator.pid"
-$LogFile = Join-Path $OrchDir ".mcp-orchestrator.log"
-$ErrFile = Join-Path $OrchDir ".mcp-orchestrator.err"
+$PidFile = Join-Path $OrchDir ".porch.pid"
+$LogFile = Join-Path $OrchDir ".porch.log"
+$ErrFile = Join-Path $OrchDir ".porch.err"
 $HostsPath = "C:\Windows\System32\drivers\etc\hosts"
 $HostsLine = "127.0.0.1 $Hostname"
 
-Write-Host "MCP Orchestrator installer" -ForegroundColor Cyan
-Write-Host "=========================="
+Write-Host "Porch installer" -ForegroundColor Cyan
+Write-Host "==============="
 Write-Host ""
-Write-Host "  Created and maintained by Nolan Taft - " -NoNewline -ForegroundColor Gray
-Write-Host "https://github.com/dev-nolant/MCP-Orchestrator" -ForegroundColor DarkGray
+Write-Host "  https://porch.sh - " -NoNewline -ForegroundColor Gray
+Write-Host "https://github.com/porch-sh/porch" -ForegroundColor DarkGray
 Write-Host ""
 
 # Check Node.js
@@ -101,14 +101,14 @@ if ($InstallUv) {
     }
 }
 
-# Add mcporch.local to hosts if missing
+# Add porch.local to hosts if missing
 $hostsContent = Get-Content $HostsPath -Raw -ErrorAction SilentlyContinue
 if ($hostsContent -match "127\.0\.0\.1\s+$Hostname") {
     Write-Host "`n  [OK] $Hostname already in hosts file"
 } else {
     Write-Host "`n  Adding $Hostname to hosts file (requires Administrator)..." -ForegroundColor Yellow
     try {
-        Add-Content -Path $HostsPath -Value "`n# MCP Orchestrator`n$HostsLine" -ErrorAction Stop
+        Add-Content -Path $HostsPath -Value "`n# Porch`n$HostsLine" -ErrorAction Stop
         Write-Host "  [OK] Added $Hostname to hosts file"
     } catch {
         Write-Host "  Could not add to hosts. Run as Administrator or add manually: $HostsLine"
@@ -116,11 +116,11 @@ if ($hostsContent -match "127\.0\.0\.1\s+$Hostname") {
 }
 
 # Copy example config if none exists
-$Config = Join-Path $OrchDir "mcp-orchestrator.config.json"
-$Example = Join-Path $OrchDir "mcp-orchestrator.config.example.json"
+$Config = Join-Path $OrchDir "porch.config.json"
+$Example = Join-Path $OrchDir "porch.config.example.json"
 if (-not (Test-Path $Config) -and (Test-Path $Example)) {
     Copy-Item $Example $Config -Force
-    Write-Host "  [OK] Created mcp-orchestrator.config.json from example" -ForegroundColor Green
+    Write-Host "  [OK] Created porch.config.json from example" -ForegroundColor Green
 }
 
 # Install deps and build
@@ -161,7 +161,7 @@ if (Test-Path $PidFile) {
 }
 
 # Start server in background (keychain is read automatically at startup)
-Write-Host "`nStarting MCP Orchestrator in background..."
+Write-Host "`nStarting Porch in background..."
 
 if (Test-Path $LogFile) { Remove-Item $LogFile -Force -ErrorAction SilentlyContinue }
 if (Test-Path $ErrFile) { Remove-Item $ErrFile -Force -ErrorAction SilentlyContinue }
@@ -191,12 +191,12 @@ if (Get-Process -Id $proc.Id -ErrorAction SilentlyContinue) {
         Write-Host "To enable later: .\scripts\enable-startup.ps1"
     } else {
         Write-Host "Setting up auto-start on login..."
-        Unregister-ScheduledTask -TaskName "MCP Orchestrator" -Confirm:$false -ErrorAction SilentlyContinue
+        Unregister-ScheduledTask -TaskName "Porch" -Confirm:$false -ErrorAction SilentlyContinue
         $nodePath = (Get-Command node).Source
         $action = New-ScheduledTaskAction -Execute $nodePath -Argument "build/server.js" -WorkingDirectory $OrchDir
         $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
         $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
-        Register-ScheduledTask -TaskName "MCP Orchestrator" -Action $action -Trigger $trigger -Settings $settings -Force | Out-Null
+        Register-ScheduledTask -TaskName "Porch" -Action $action -Trigger $trigger -Settings $settings -Force | Out-Null
         Write-Host "  [OK] Auto-start enabled (Task Scheduler)" -ForegroundColor Green
         Write-Host "To disable: .\scripts\disable-startup.ps1"
     }
