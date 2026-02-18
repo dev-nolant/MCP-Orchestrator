@@ -142,9 +142,9 @@ async function main() {
     res.json({
       port: Number(process.env.PORT ?? 3847),
       cwd,
-      configPath: path.join(cwd, 'mcp-orchestrator.config.json'),
-      secretsPath: path.join(cwd, 'mcp-orchestrator.secrets.json'),
-      logsPath: path.join(cwd, 'mcp-orchestrator.logs.json'),
+      configPath: path.join(cwd, 'porch.config.json'),
+      secretsPath: path.join(cwd, 'porch.secrets.json'),
+      logsPath: path.join(cwd, 'porch.logs.json'),
       secretsEncrypted: isEncryptionEnabled(),
     });
   });
@@ -158,9 +158,9 @@ async function main() {
     res.json({
       key,
       instructions: [
-        'Add to ~/.mcp-orchestrator.env:',
-        `MCP_ORCHESTRATOR_MASTER_KEY='${key}'`,
-        'Then chmod 600 ~/.mcp-orchestrator.env and restart the server.',
+        'Add to ~/.porch.env:',
+        `PORCH_MASTER_KEY='${key}'`,
+        'Then chmod 600 ~/.porch.env and restart the server.',
       ],
     });
   });
@@ -175,7 +175,7 @@ async function main() {
       }
       storeMasterKeyInKeychain(password, true);
       const key = deriveKeyFromPassword(password);
-      process.env.MCP_ORCHESTRATOR_MASTER_KEY = key;
+      process.env.PORCH_MASTER_KEY = key;
       // Force re-encrypt existing secrets
       for (const k of listSecretKeys()) {
         const v = getSecret(k);

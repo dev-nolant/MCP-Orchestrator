@@ -1,6 +1,6 @@
 /**
  * Secure storage for Bearer tokens and other secrets.
- * Master key is read from: 1) MCP_ORCHESTRATOR_MASTER_KEY env, 2) OS keychain.
+ * Master key is read from: 1) PORCH_MASTER_KEY env, 2) MCP_ORCHESTRATOR_MASTER_KEY (legacy), 3) OS keychain.
  * When a master key is available, secrets are stored encrypted (AES-256-GCM).
  * Otherwise falls back to plain JSON (legacy).
  */
@@ -9,28 +9,36 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import keytar from 'keytar-sync';
 const { getPasswordSync, setPasswordSync, deletePasswordSync } = keytar;
-const SECRETS_PATH = path.join(process.cwd(), 'mcp-orchestrator.secrets.json');
-const KEYCHAIN_SERVICE = 'mcp-orchestrator';
+const SECRETS_PATH = path.join(process.cwd(), 'porch.secrets.json');
+const LEGACY_SECRETS_PATH = path.join(process.cwd(), 'mcp-orchestrator.secrets.json');
+const KEYCHAIN_SERVICE = 'porch';
 const KEYCHAIN_ACCOUNT = 'master-key';
+const LEGACY_KEYCHAIN_SERVICE = 'mcp-orchestrator';
 const ALGO = 'aes-256-gcm';
 const IV_LEN = 12;
 const KEY_LEN = 32;
-const PBKDF2_SALT = 'mcp-orchestrator-secrets-v1';
+const PBKDF2_SALT = 'porch-secrets-v1';
 const PBKDF2_ITERATIONS = 100000;
 function getMasterKeyFromKeychain() {
     try {
-        return getPasswordSync(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT);
+        const fromPorch = getPasswordSync(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT);
+        if (fromPorch)
+            return fromPorch;
+    }
+    catch { /* ignore */ }
+    try {
+        return getPasswordSync(LEGACY_KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT);
     }
     catch {
         return null;
     }
 }
 function getMasterKey() {
-    let raw = process.env.MCP_ORCHESTRATOR_MASTER_KEY?.trim();
+    let raw = process.env.PORCH_MASTER_KEY?.trim() || process.env.MCP_ORCHESTRATOR_MASTER_KEY?.trim();
     if (!raw) {
         const fromKeychain = getMasterKeyFromKeychain();
         if (fromKeychain) {
-            process.env.MCP_ORCHESTRATOR_MASTER_KEY = fromKeychain;
+            process.env.PORCH_MASTER_KEY = fromKeychain;
             raw = fromKeychain;
         }
     }
@@ -75,11 +83,19 @@ function isEncryptedPayload(obj) {
         'tag' in obj &&
         'data' in obj);
 }
+function getSecretsPath() {
+    if (fs.existsSync(SECRETS_PATH))
+        return SECRETS_PATH;
+    if (fs.existsSync(LEGACY_SECRETS_PATH))
+        return LEGACY_SECRETS_PATH;
+    return SECRETS_PATH; // write to new path
+}
 function loadSecrets() {
     try {
-        if (!fs.existsSync(SECRETS_PATH))
+        const secretsPath = getSecretsPath();
+        if (!fs.existsSync(secretsPath))
             return {};
-        const raw = fs.readFileSync(SECRETS_PATH, 'utf8');
+        const raw = fs.readFileSync(secretsPath, 'utf8');
         const parsed = JSON.parse(raw);
         const key = getMasterKey();
         if (key) {
@@ -120,13 +136,15 @@ function getSecrets() {
 function saveSecrets(secrets) {
     try {
         const key = getMasterKey();
+        const pathToUse = getSecretsPath();
+        const writePath = pathToUse === LEGACY_SECRETS_PATH ? SECRETS_PATH : pathToUse; // migrate to new path
         if (key) {
             const plain = JSON.stringify(secrets);
             const payload = encrypt(plain, key);
-            fs.writeFileSync(SECRETS_PATH, JSON.stringify(payload), 'utf8');
+            fs.writeFileSync(writePath, JSON.stringify(payload), 'utf8');
         }
         else {
-            fs.writeFileSync(SECRETS_PATH, JSON.stringify(secrets, null, 2), 'utf8');
+            fs.writeFileSync(writePath, JSON.stringify(secrets, null, 2), 'utf8');
         }
         cache = secrets;
     }

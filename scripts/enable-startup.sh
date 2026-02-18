@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Enable MCP Orchestrator auto-start on login.
+# Enable Porch auto-start on login.
 # Sets up launchd (Mac) or systemd (Linux) to start the server when you log in.
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ORCH_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-PID_FILE="$ORCH_DIR/.mcp-orchestrator.pid"
+PID_FILE="$ORCH_DIR/.porch.pid"
 
 # Stop nohup instance if running
 if [ -f "$PID_FILE" ]; then
@@ -16,7 +16,7 @@ if [ -f "$PID_FILE" ]; then
 fi
 
 if [ "$(uname)" = "Darwin" ]; then
-  PLIST="$HOME/Library/LaunchAgents/com.mcp-orchestrator.server.plist"
+  PLIST="$HOME/Library/LaunchAgents/com.porch.server.plist"
   mkdir -p "$(dirname "$PLIST")"
   cat > "$PLIST" << PLISTEOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -24,7 +24,7 @@ if [ "$(uname)" = "Darwin" ]; then
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.mcp-orchestrator.server</string>
+  <string>com.porch.server</string>
   <key>ProgramArguments</key>
   <array>
     <string>$(command -v node)</string>
@@ -37,9 +37,9 @@ if [ "$(uname)" = "Darwin" ]; then
   <key>KeepAlive</key>
   <false/>
   <key>StandardOutPath</key>
-  <string>$ORCH_DIR/.mcp-orchestrator.log</string>
+  <string>$ORCH_DIR/.porch.log</string>
   <key>StandardErrorPath</key>
-  <string>$ORCH_DIR/.mcp-orchestrator.log</string>
+  <string>$ORCH_DIR/.porch.log</string>
 </dict>
 </plist>
 PLISTEOF
@@ -48,9 +48,9 @@ PLISTEOF
 else
   SYSTEMD_USER="$HOME/.config/systemd/user"
   mkdir -p "$SYSTEMD_USER"
-  cat > "$SYSTEMD_USER/mcp-orchestrator.service" << SVCEOF
+  cat > "$SYSTEMD_USER/porch.service" << SVCEOF
 [Unit]
-Description=MCP Orchestrator
+Description=Porch
 After=network.target
 
 [Service]
@@ -58,14 +58,14 @@ Type=simple
 ExecStart=$(command -v node) build/server.js
 WorkingDirectory=$ORCH_DIR
 Restart=on-failure
-StandardOutput=append:$ORCH_DIR/.mcp-orchestrator.log
-StandardError=append:$ORCH_DIR/.mcp-orchestrator.log
+StandardOutput=append:$ORCH_DIR/.porch.log
+StandardError=append:$ORCH_DIR/.porch.log
 
 [Install]
 WantedBy=default.target
 SVCEOF
   systemctl --user daemon-reload
-  systemctl --user enable mcp-orchestrator.service
-  systemctl --user start mcp-orchestrator.service
+  systemctl --user enable porch.service
+  systemctl --user start porch.service
   echo "Auto-start enabled (systemd). Server is running."
 fi

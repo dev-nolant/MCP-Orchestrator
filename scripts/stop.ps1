@@ -1,9 +1,9 @@
-# Stop MCP Orchestrator background server (Windows)
+# Stop Porch background server (Windows)
 # Handles both PID file (manual start) and scheduled task start
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $OrchDir = Split-Path -Parent $ScriptDir
-$PidFile = Join-Path $OrchDir ".mcp-orchestrator.pid"
+$PidFile = Join-Path $OrchDir ".porch.pid"
 
 $Stopped = $false
 
@@ -13,7 +13,7 @@ if (Test-Path $PidFile) {
     if ($ServerPid -and (Get-Process -Id $ServerPid -ErrorAction SilentlyContinue)) {
         # /T kills process tree (cmd + child node)
         cmd /c "taskkill /PID $ServerPid /T /F 2>nul"
-        Write-Host "Stopped MCP Orchestrator (PID $ServerPid)"
+        Write-Host "Stopped Porch (PID $ServerPid)"
         $Stopped = $true
     }
     Remove-Item $PidFile -Force -ErrorAction SilentlyContinue
@@ -24,7 +24,7 @@ if (-not $Stopped) {
     foreach ($p in $procs) {
         if ($p.CommandLine -like "*build\server.js*" -or $p.CommandLine -like "*build/server.js*") {
             Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue
-            Write-Host "Stopped MCP Orchestrator (PID $($p.ProcessId))"
+            Write-Host "Stopped Porch (PID $($p.ProcessId))"
             $Stopped = $true
             break
         }
@@ -32,5 +32,5 @@ if (-not $Stopped) {
 }
 
 if (-not $Stopped) {
-    Write-Host "MCP Orchestrator is not running."
+    Write-Host "Porch is not running."
 }

@@ -1,10 +1,10 @@
-# Update MCP Orchestrator: git pull, npm install, npm run build, restart server
+# Update Porch: git pull, npm install, npm run build, restart server
 
 $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $OrchDir = Split-Path -Parent $ScriptDir
 
-Write-Host "MCP Orchestrator — updater" -ForegroundColor Cyan
+Write-Host "Porch — updater" -ForegroundColor Cyan
 Write-Host "=========================="
 
 # Find git root (handles monorepo)

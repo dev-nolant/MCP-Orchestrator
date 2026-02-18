@@ -27,7 +27,7 @@ const WorkflowStepSchema = z.object({
 });
 async function createMcpServer() {
     const server = new McpServer({
-        name: 'mcp-orchestrator',
+        name: 'porch',
         version: '0.1.0',
     }, { capabilities: { logging: {} } });
     server.registerTool('list_workflows', {

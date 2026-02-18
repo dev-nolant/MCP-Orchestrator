@@ -19,7 +19,7 @@ async function main() {
     if (isEncryptionEnabled()) {
         console.log('Encryption is already enabled (key found in env or keychain).');
         console.log('To change the password, delete the key first:');
-        console.log('  macOS: Open Keychain Access → search "mcp-orchestrator" → delete\n');
+        console.log('  macOS: Open Keychain Access → search "porch" → delete\n');
         return;
     }
     const password = await prompt('Enter a password (min 8 chars) to derive encryption key: ');

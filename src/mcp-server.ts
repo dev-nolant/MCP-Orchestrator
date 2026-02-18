@@ -49,7 +49,7 @@ const WorkflowStepSchema = z.object({
 async function createMcpServer(): Promise<McpServer> {
   const server = new McpServer(
     {
-      name: 'mcp-orchestrator',
+      name: 'porch',
       version: '0.1.0',
     },
     { capabilities: { logging: {} } },

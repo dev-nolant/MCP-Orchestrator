@@ -13,22 +13,26 @@ import { appendLog } from './logs.js';
 import { getSecret } from './secrets.js';
 import { toTunnelSubdomain } from './config.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ORCHESTRATOR_TUNNEL_STATE_PATH = path.join(process.cwd(), 'mcp-orchestrator.secure-tunnel.json');
+const ORCHESTRATOR_TUNNEL_STATE_PATH = path.join(process.cwd(), 'porch.secure-tunnel.json');
+const LEGACY_TUNNEL_STATE_PATH = path.join(process.cwd(), 'mcp-orchestrator.secure-tunnel.json');
 const CLOUDFLARED_DIR = path.join(os.homedir(), '.cloudflared');
 const CLOUDFLARED_CERT = path.join(CLOUDFLARED_DIR, 'cert.pem');
 let cloudflareTunnelProcess = null;
 let cloudflareTunnelUrl = null;
 function loadOrchestratorTunnelState() {
-    try {
-        if (fs.existsSync(ORCHESTRATOR_TUNNEL_STATE_PATH)) {
-            const raw = fs.readFileSync(ORCHESTRATOR_TUNNEL_STATE_PATH, 'utf8');
-            const parsed = JSON.parse(raw);
-            if (parsed?.url)
-                return parsed;
+    const paths = [ORCHESTRATOR_TUNNEL_STATE_PATH, LEGACY_TUNNEL_STATE_PATH];
+    for (const p of paths) {
+        try {
+            if (fs.existsSync(p)) {
+                const raw = fs.readFileSync(p, 'utf8');
+                const parsed = JSON.parse(raw);
+                if (parsed?.url)
+                    return parsed;
+            }
         }
-    }
-    catch {
-        /* ignore */
+        catch {
+            /* ignore */
+        }
     }
     return null;
 }
@@ -36,9 +40,14 @@ function saveOrchestratorTunnelState(state) {
     try {
         if (state) {
             fs.writeFileSync(ORCHESTRATOR_TUNNEL_STATE_PATH, JSON.stringify(state, null, 2), 'utf8');
+            if (fs.existsSync(LEGACY_TUNNEL_STATE_PATH))
+                fs.unlinkSync(LEGACY_TUNNEL_STATE_PATH);
         }
-        else if (fs.existsSync(ORCHESTRATOR_TUNNEL_STATE_PATH)) {
-            fs.unlinkSync(ORCHESTRATOR_TUNNEL_STATE_PATH);
+        else {
+            for (const p of [ORCHESTRATOR_TUNNEL_STATE_PATH, LEGACY_TUNNEL_STATE_PATH]) {
+                if (fs.existsSync(p))
+                    fs.unlinkSync(p);
+            }
         }
     }
     catch {
@@ -268,7 +277,7 @@ async function startNamedTunnel(port) {
         }, 5000);
     });
 }
-const TUNNEL_NAME = (process.env.MCP_ORCHESTRATOR_TUNNEL_NAME?.trim() || 'mcp-orchestrator').replace(/[/\\:*?"<>|]/g, '-');
+const TUNNEL_NAME = (process.env.PORCH_TUNNEL_NAME?.trim() || process.env.MCP_ORCHESTRATOR_TUNNEL_NAME?.trim() || 'porch').replace(/[/\\:*?"<>|]/g, '-');
 const CREDENTIALS_PATH = path.join(CLOUDFLARED_DIR, `${TUNNEL_NAME}-credentials.json`);
 const CONFIG_PATH = path.join(CLOUDFLARED_DIR, `${TUNNEL_NAME}-config.yml`);
 const CLOUDFLARED_TIMEOUT_MS = 90_000; // tunnel create/route can be slow, esp on Windows
@@ -319,7 +328,7 @@ async function startLoggedInTunnel(port, baseDomain, mcps) {
     if (!fs.existsSync(CLOUDFLARED_DIR)) {
         fs.mkdirSync(CLOUDFLARED_DIR, { recursive: true });
     }
-    const getHostnameTunnelName = () => `mcp-orchestrator-${os.hostname().toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'device'}`;
+    const getHostnameTunnelName = () => `porch-${os.hostname().toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'device'}`;
     // Resolve tunnel name and paths - prefer existing credentials (default or hostname-based)
     let tunnelName = TUNNEL_NAME;
     let credentialsPath = CREDENTIALS_PATH;

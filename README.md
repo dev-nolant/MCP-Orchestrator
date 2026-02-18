@@ -1,18 +1,18 @@
 <a name="top"></a>
 
-# MCP Orchestrator
+# Porch
 
 [![Node.js](https://img.shields.io/badge/Node.js-18+-339933?logo=node.js&logoColor=white)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/language-TypeScript-3178C6)](https://www.typescriptlang.org/)
-[![OS](https://img.shields.io/badge/OS-Linux%2C%20Windows%2C%20macOS-0078D4)](https://github.com/dev-nolant/MCP-Orchestrator)
-[![GitHub release](https://img.shields.io/github/v/release/dev-nolant/MCP-Orchestrator)](https://github.com/dev-nolant/MCP-Orchestrator/releases)
+[![OS](https://img.shields.io/badge/OS-Linux%2C%20Windows%2C%20macOS-0078D4)](https://github.com/dev-nolant/porch)
+[![GitHub release](https://img.shields.io/github/v/release/dev-nolant/porch)](https://github.com/dev-nolant/porch/releases)
 
 ⭐ **Star us on GitHub** — it helps others discover the project!
 
-[![Share on X](https://img.shields.io/badge/share-000000?logo=x&logoColor=white)](https://x.com/intent/tweet?text=Check%20out%20MCP%20Orchestrator%20%E2%80%94%20connect%20and%20chain%20MCPs%20locally%20https://github.com/dev-nolant/MCP-Orchestrator%20%23MCP%20%23AI)
-[![Share on LinkedIn](https://img.shields.io/badge/share-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/sharing/share-offsite/?url=https://github.com/dev-nolant/MCP-Orchestrator)
+[![Share on X](https://img.shields.io/badge/share-000000?logo=x&logoColor=white)](https://x.com/intent/tweet?text=Check%20out%20Porch%20%E2%80%94%20connect%20and%20chain%20MCPs%20locally%20https://porch.sh%20%23MCP%20%23AI)
+[![Share on LinkedIn](https://img.shields.io/badge/share-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/sharing/share-offsite/?url=https://porch.sh)
 
-Your MCPs don't talk to each other. MCP Orchestrator discovers and installs MCPs from npm and PyPI, connects them by URL or stdio, chains their tools in workflows, tunnels any MCP to the internet (quick or named, per-MCP tokens), and lets your favorite LLM add MCPs, build workflows, manage the tunnel, and run it all from chat. Web UI, Easy Install for Cursor, Claude, Windsurf, and Continue, CLI, one-command bootstrap with auto-start.
+Your MCPs don't talk to each other. Porch discovers and installs MCPs from npm and PyPI, connects them by URL or stdio, chains their tools in workflows, tunnels any MCP to the internet (quick or named, per-MCP tokens), and lets your favorite LLM add MCPs, build workflows, manage the tunnel, and run it all from chat. Web UI, Easy Install for Cursor, Claude, Windsurf, and Continue, CLI, one-command bootstrap with auto-start.
 
 ## Table of Contents
 
@@ -31,7 +31,7 @@ Your MCPs don't talk to each other. MCP Orchestrator discovers and installs MCPs
 ## Setup
 
 ```bash
-cd mcp-orchestrator
+cd porch
 npm install
 npm run build
 ```
@@ -40,7 +40,7 @@ npm run build
 
 Copy the example and edit for your setup:
 ```bash
-cp mcp-orchestrator.config.example.json mcp-orchestrator.config.json
+cp porch.config.example.json porch.config.json
 ```
 Your config is gitignored and never committed. Two MCP types:
 
@@ -82,22 +82,22 @@ For URL MCPs that require a Bearer token, add `authorizationToken`:
 
 Supported formats:
 - `env:VAR_NAME` — read from `process.env.VAR_NAME` (recommended for CI)
-- `secret:key` — read from `mcp-orchestrator.secrets.json` (stored locally, gitignored)
+- `secret:key` — read from `porch.secrets.json` (stored locally, gitignored)
 - Plain string — avoid in committed config
 
 Store a token via API: `PUT /api/secrets/:key` with `{ "value": "your-token" }`.
 
 ### Encrypted secrets (recommended)
 
-When a master key is available, secrets are stored **encrypted** (AES-256-GCM) in `mcp-orchestrator.secrets.json`. The key is stored in the **OS keychain** (macOS Keychain, Windows Credential Manager, Linux Secret Service)—no plain-text key file.
+When a master key is available, secrets are stored **encrypted** (AES-256-GCM) in `porch.secrets.json`. The key is stored in the **OS keychain** (macOS Keychain, Windows Credential Manager, Linux Secret Service)—no plain-text key file.
 
 **Install script** prompts for a password and stores the derived key in the OS keychain. No files with secrets.
 
 **Manual setup:** run `npm run setup-encryption` and enter a password (min 8 chars). Or use the Settings UI: enter a password and click "Set up encryption". Existing secrets are re-encrypted immediately.
 
-**Override:** set `MCP_ORCHESTRATOR_MASTER_KEY` (base64 32-byte key or passphrase) in your environment to use a different key than keychain.
+**Override:** set `PORCH_MASTER_KEY` (base64 32-byte key or passphrase) in your environment to use a different key than keychain.
 
-**Without master key:** falls back to legacy plain JSON. Restrict permissions: `chmod 600 mcp-orchestrator.secrets.json`.
+**Without master key:** falls back to legacy plain JSON. Restrict permissions: `chmod 600 porch.secrets.json`.
 
 ### Tool routing: gateway vs full
 
@@ -148,47 +148,47 @@ Example: Spotify → Pieces
 
 ## Easy Install (Mac, Linux, Windows)
 
-One-command installer that runs the server in the background and adds **mcporch.local** so you can open the UI with a friendly URL. By default, the server is set to **auto-start when you log in**.
+One-command installer that runs the server in the background and adds **porch.local** so you can open the UI with a friendly URL. By default, the server is set to **auto-start when you log in**.
 
 ### One-line install (paste into terminal)
 
 **Mac & Linux:**
 ```bash
-bash <(curl -sSL https://raw.githubusercontent.com/dev-nolant/MCP-Orchestrator/main/scripts/bootstrap.sh)
+bash <(curl -sSL https://raw.githubusercontent.com/dev-nolant/porch/main/scripts/bootstrap.sh)
 ```
 
 **Skip auto-start:**
 ```bash
-bash <(curl -sSL https://raw.githubusercontent.com/dev-nolant/MCP-Orchestrator/main/scripts/bootstrap.sh) --no-startup
+bash <(curl -sSL https://raw.githubusercontent.com/dev-nolant/porch/main/scripts/bootstrap.sh) --no-startup
 ```
 
 **Windows PowerShell:**
 ```powershell
-irm https://raw.githubusercontent.com/dev-nolant/MCP-Orchestrator/main/scripts/bootstrap.ps1 | iex
+irm https://raw.githubusercontent.com/dev-nolant/porch/main/scripts/bootstrap.ps1 | iex
 ```
 
-**Windows, skip auto-start:** `$env:NO_STARTUP=1; irm https://raw.githubusercontent.com/dev-nolant/MCP-Orchestrator/main/scripts/bootstrap.ps1 | iex`
+**Windows, skip auto-start:** `$env:NO_STARTUP=1; irm https://raw.githubusercontent.com/dev-nolant/porch/main/scripts/bootstrap.ps1 | iex`
 
-The bootstrap clones the repo to `~/mcp-orchestrator`, runs `npm install` and `npm run build`, then starts the server. It will prompt for optional tools (uv, cloudflared) and encrypted secrets setup.
+The bootstrap clones the repo to `~/porch`, runs `npm install` and `npm run build`, then starts the server. It will prompt for optional tools (uv, cloudflared) and encrypted secrets setup.
 
-**Non-interactive** (CI, automation, skip all prompts): `curl -sSL https://raw.githubusercontent.com/dev-nolant/MCP-Orchestrator/main/scripts/bootstrap.sh | bash`
+**Non-interactive** (CI, automation, skip all prompts): `curl -sSL https://raw.githubusercontent.com/dev-nolant/porch/main/scripts/bootstrap.sh | bash`
 
 ---
 
 **Mac & Linux (manual, after clone):**
 ```bash
-cd mcp-orchestrator
+cd porch
 chmod +x scripts/*.sh
 ./scripts/install.sh
 ```
-Then open **http://mcporch.local:3847** (or http://localhost:3847)
+Then open **http://porch.local:3847** (or http://localhost:3847)
 
 **Windows (PowerShell as Administrator for hosts file):**
 ```powershell
-cd mcp-orchestrator
+cd porch
 .\scripts\install.ps1
 ```
-Then open **http://mcporch.local:3847**
+Then open **http://porch.local:3847**
 
 **Skip auto-start** (install without auto-start on login):
 
@@ -230,9 +230,9 @@ Then open **http://mcporch.local:3847**
 - `./scripts/update.sh` / `.\scripts\update.ps1` — update (git pull, npm install, build, restart)
 - `./scripts/enable-startup.sh` / `.\scripts\enable-startup.ps1` — enable auto-start on login
 - `./scripts/disable-startup.sh` / `.\scripts\disable-startup.ps1` — disable auto-start on login
-- Logs: `tail -f .mcp-orchestrator.log` (Mac/Linux) or `Get-Content .mcp-orchestrator.log -Wait -Tail 20` (Windows). On Windows, stderr goes to `.mcp-orchestrator.err`.
+- Logs: `tail -f .porch.log` (Mac/Linux) or `Get-Content .porch.log -Wait -Tail 20` (Windows). On Windows, stderr goes to `.porch.err`.
 
-The installer adds `127.0.0.1 mcporch.local` to your hosts file (requires sudo/admin on first run).
+The installer adds `127.0.0.1 porch.local` to your hosts file (requires sudo/admin on first run).
 
 ### Disabling auto-start
 
@@ -262,23 +262,23 @@ To re-enable auto-start later, run `./scripts/enable-startup.sh` or `.\scripts\e
 
 **Mac & Linux:**
 ```bash
-cd ~/mcp-orchestrator
+cd ~/porch
 ./scripts/disable-startup.sh
 ```
 This stops the server and removes the launchd/systemd auto-start entry.
 
 **Windows:**
 ```powershell
-cd ~\mcp-orchestrator
+cd ~\porch
 .\scripts\disable-startup.ps1
 ```
 This stops the server and removes the scheduled task.
 
 **Optional cleanup:**
-- Remove `127.0.0.1 mcporch.local` from your hosts file (`/etc/hosts` on Mac/Linux, `C:\Windows\System32\drivers\etc\hosts` on Windows).
-- Delete the project folder: `rm -rf ~/mcp-orchestrator` (Mac/Linux) or remove `~\mcp-orchestrator` (Windows).
+- Remove `127.0.0.1 porch.local` from your hosts file (`/etc/hosts` on Mac/Linux, `C:\Windows\System32\drivers\etc\hosts` on Windows).
+- Delete the project folder: `rm -rf ~/porch` (Mac/Linux) or remove `~\porch` (Windows).
 
-If you used a custom install location, run the scripts from that directory instead of `~/mcp-orchestrator`.
+If you used a custom install location, run the scripts from that directory instead of `~/porch`.
 
 ## Web UI
 
@@ -291,12 +291,12 @@ The UI lets you:
 
 
 - **Add MCPs** by URL (e.g. `http://localhost:39300/.../mcp`) or by file/stdio (command, args, cwd)
-- **Connect** — Add MCP Orchestrator to Cursor, Claude Desktop, Windsurf, or Continue via Easy Install 
+- **Connect** — Add Porch to Cursor, Claude Desktop, Windsurf, or Continue via Easy Install 
 - **Build workflows** by chaining actions from your MCPs; use `{{step0}}`, `{{step1}}`, `{{now}}`, `{{isoDate}}`, etc. in args
 - **Schedule workflows** to run automatically (cron) via the Schedule tab
 - **Run workflows** and view output
 
-Config is saved to `mcp-orchestrator.config.json` in the project directory.
+Config is saved to `porch.config.json` in the project directory.
 
 ## CLI
 
@@ -311,12 +311,12 @@ To sync Spotify → Pieces automatically every 30 minutes:
 
 **Cron:**
 ```cron
-*/30 * * * * cd /path/to/mcp-orchestrator && npm run workflow -- "Spotify to Pieces"
+*/30 * * * * cd /path/to/porch && npm run workflow -- "Spotify to Pieces"
 ```
 
 ## Connect (MCP Client Setup)
 
-The **Connect** tab in the Web UI makes it easy to add MCP Orchestrator to your AI client.
+The **Connect** tab in the Web UI makes it easy to add Porch to your AI client.
 
 1. Open the UI (`npm run ui`) → **Connect** tab
 2. Select your **platform** (macOS, Windows, Linux — auto-detected)
@@ -338,7 +338,7 @@ Or use **Copy config** to paste the JSON manually. Restart your client after sav
 
 ## Use as an MCP
 
-The MCP Orchestrator is a first-class MCP server. Add it to any MCP client (Cursor, Claude Desktop, Windsurf, Continue, MCP Inspector, or custom apps) and operate workflows, MCPs, the tunnel, and installs—all from chat, no web UI required.
+Porch is a first-class MCP server. Add it to any MCP client (Cursor, Claude Desktop, Windsurf, Continue, MCP Inspector, or custom apps) and operate workflows, MCPs, the tunnel, and installs—all from chat, no web UI required.
 
 ### Resources (read these for context)
 - `orchestrator://glossary` — Read first: reference for every tool, args, usage, examples (customize via `docs/glossary.md`)
@@ -361,7 +361,7 @@ The MCP Orchestrator is a first-class MCP server. Add it to any MCP client (Curs
 
 ### Setup
 
-Add the orchestrator as a **Streamable HTTP** MCP with URL `http://localhost:3847/mcp` (or `http://mcporch.local:3847/mcp` if using the hosts entry). **Easiest:** use the Connect tab → Easy Install.
+Add Porch as a **Streamable HTTP** MCP with URL `http://localhost:3847/mcp` (or `http://porch.local:3847/mcp` if using the hosts entry). **Easiest:** use the Connect tab → Easy Install.
 
 **Cursor, Windsurf, Continue:** These clients support HTTP MCPs. Add URL `http://localhost:3847/mcp` in your client’s MCP settings, or use Connect → Easy Install.
 
@@ -370,18 +370,18 @@ Add the orchestrator as a **Streamable HTTP** MCP with URL `http://localhost:384
 ```json
 {
   "mcpServers": {
-    "mcp-orchestrator": {
+    "porch": {
       "command": "node",
-      "args": ["/path/to/mcp-orchestrator/build/mcp-bridge.js"],
+      "args": ["/path/to/porch/build/mcp-bridge.js"],
       "env": {
-        "MCP_ORCHESTRATOR_URI": "http://localhost:3847/mcp"
+        "PORCH_URI": "http://localhost:3847/mcp"
       }
     }
   }
 }
 ```
 
-Replace `/path/to/mcp-orchestrator` with your install path. Ensure the MCP Orchestrator server is running (`npm run ui` or via the install scripts) before connecting.
+Replace `/path/to/porch` with your install path. Ensure the Porch server is running (`npm run ui` or via the install scripts) before connecting.
 
 ## Public URL (Tunnel)
 
@@ -401,8 +401,8 @@ Free, no sign-up. URL changes each start.
 Requires a Cloudflare account. Same URL every time.
 
 1. **Login** — In the Public URLs tab, click **Login to Cloudflare**. A browser opens; sign in and approve.
-2. **Set subdomain base** — Enter your domain (e.g. `mcp.example.com`) in the "Subdomain base" field and Save. The domain must be in your Cloudflare account.
-3. **Start tunnel** — Creates a named tunnel, routes DNS (`spotify.mcp.example.com`, `pieces.mcp.example.com`, etc.), and runs. Each MCP gets its own subdomain.
+2. **Set subdomain base** — Enter your domain (e.g. `porch.sh`) in the "Subdomain base" field and Save. The domain must be in your Cloudflare account.
+3. **Start tunnel** — Creates a named tunnel, routes DNS (`spotify.porch.sh`, `pieces.porch.sh`, etc.), and runs. Each MCP gets its own subdomain.
 
 Alternatively, use token-based named tunnel: set `CLOUDFLARE_TUNNEL_TOKEN` and `CLOUDFLARE_TUNNEL_PUBLIC_URL` (or secrets).
 
@@ -415,7 +415,7 @@ Authorization: Bearer <your-token>
 ```
 
 **Security:**
-- MCP tokens in `mcp-orchestrator.secrets.json`. Use **Revoke** to invalidate.
+- MCP tokens in `porch.secrets.json`. Use **Revoke** to invalidate.
 - Tunnel token/URL: use env vars or secrets; never commit.
 
 ## Prerequisites
