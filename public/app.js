@@ -4,6 +4,8 @@ let config = { mcps: {}, workflows: [] };
 let toolsByMcp = {};
 let editingWorkflowIndex = -1;
 let mcpStatus = { checking: false, status: {} };
+const MCP_CHECK_STALE_MS = 30_000; // skip re-check when switching tabs if data is newer than this
+let lastMcpsCheckTime = 0;
 
 let logStore = [];
 
@@ -177,18 +179,33 @@ async function loadTools() {
   return toolsByMcp;
 }
 
-async function checkMcpStatus() {
+const MCP_SUMMARY_TIMEOUT_MS = 45000; // max wait for mcps-summary (MCPs that hang won't block forever)
+
+async function loadMcpsSummary() {
   if (Object.keys(config.mcps).length === 0) return;
   mcpStatus.checking = true;
   mcpStatus.status = {};
   renderMcpsPanel();
   try {
-    mcpStatus.status = await api('/mcp-status');
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('MCP check timed out')), MCP_SUMMARY_TIMEOUT_MS)
+    );
+    const { status, toolsByMcp: tools } = await Promise.race([api('/mcps-summary'), timeoutPromise]);
+    mcpStatus.status = status;
+    toolsByMcp = tools;
+    lastMcpsCheckTime = Date.now();
   } catch (err) {
     mcpStatus.status = {};
+    if (err?.message === 'MCP check timed out') console.warn('MCP status check timed out');
   }
   mcpStatus.checking = false;
   renderMcpsPanel();
+}
+
+async function checkMcpStatus(force = false) {
+  if (Object.keys(config.mcps).length === 0) return;
+  if (!force && Date.now() - lastMcpsCheckTime < MCP_CHECK_STALE_MS) return; // use cached data
+  await loadMcpsSummary();
 }
 
 function showModal(content) {
@@ -1000,8 +1017,7 @@ function initMcpWiki() {
         .then(async () => {
           mcp.enabled = isDisabled;
           await loadConfig();
-          await loadTools();
-          checkMcpStatus();
+          await loadMcpsSummary();
           renderMcpWiki(mcpWikiOpenFor);
           renderMcpsPanel();
         })
@@ -1061,8 +1077,7 @@ function renderMcpsPanel() {
       if (!confirm(`Delete MCP "${name}"?`)) return;
       delete config.mcps[name];
       await saveConfig();
-      await loadTools();
-      renderMcpsPanel();
+      await loadMcpsSummary();
       await appendLogToServer('config', `Deleted MCP "${name}"`);
     });
   });
@@ -1081,9 +1096,7 @@ function renderMcpsPanel() {
         });
         mcp.enabled = !nextEnabled;
         await loadConfig();
-        await loadTools();
-        renderMcpsPanel();
-        checkMcpStatus();
+        await loadMcpsSummary();
         await loadLogs();
       } catch (err) {
         await appendLogToServer('spin', `${action} ${name} failed`, err.message);
@@ -1143,9 +1156,7 @@ async function loadDiscoverServers(search = '', append = false) {
             body: JSON.stringify(body),
           });
           await loadConfig();
-          await loadTools();
-          renderMcpsPanel();
-          checkMcpStatus();
+          await loadMcpsSummary();
           btn.textContent = 'Installed';
           await loadLogs();
         } catch (err) {
@@ -1209,9 +1220,7 @@ async function loadDiscoverServers(search = '', append = false) {
               const body = envVars.length && Object.keys(env).length ? { ...payload, env } : payload;
               const { name: installedName } = await api('/registry/install', { method: 'POST', body: JSON.stringify(body) });
               await loadConfig();
-              await loadTools();
-              renderMcpsPanel();
-              checkMcpStatus();
+              await loadMcpsSummary();
               btn.textContent = 'Installed';
               await loadLogs();
             } catch (err) {
@@ -1895,9 +1904,7 @@ function showMcpModal(existingName = null) {
     }
     config.mcps[name] = mcpConfig;
     await saveConfig();
-    await loadTools();
-    renderMcpsPanel();
-    checkMcpStatus();
+    await loadMcpsSummary();
     hideModal();
   });
 }
@@ -3087,7 +3094,7 @@ function initSettingsPanel() {
 }
 
 document.getElementById('add-mcp-btn').addEventListener('click', () => showMcpModal());
-document.getElementById('check-mcp-status-btn').addEventListener('click', () => checkMcpStatus());
+document.getElementById('check-mcp-status-btn').addEventListener('click', () => checkMcpStatus(true));
 document.getElementById('add-workflow-btn').addEventListener('click', () => {
   if (Object.keys(config.mcps).length === 0) {
     alert('Add at least one MCP first.');
@@ -3123,15 +3130,13 @@ async function init() {
 
   try {
     await loadConfig();
-    await loadTools();
-    renderMcpsPanel();
     renderTunnelPanel();
-    checkMcpStatus();
     renderWorkflowsPanel();
     renderSchedulePanel();
     renderRunPanel();
     loadLogs();
     outputEl.innerHTML = '<p class="placeholder">Run a workflow to see output.</p>';
+    loadMcpsSummary(); // run in background — don't block other tabs
   } catch (err) {
     outputEl.innerHTML = renderPrettyError(formatMcpError(err.message));
     outputEl.classList.add('error');
