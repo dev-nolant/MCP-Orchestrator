@@ -1,423 +1,311 @@
-<a name="top"></a>
-
-# Porch
-
-[![Node.js](https://img.shields.io/badge/Node.js-18+-339933?logo=node.js&logoColor=white)](https://nodejs.org)
-[![TypeScript](https://img.shields.io/badge/language-TypeScript-3178C6)](https://www.typescriptlang.org/)
-[![OS](https://img.shields.io/badge/OS-Linux%2C%20Windows%2C%20macOS-0078D4)](https://github.com/porch-sh/porch)
-[![GitHub release](https://img.shields.io/github/v/release/porch-sh/porch)](https://github.com/porch-sh/porch/releases)
-
-⭐ **Star us on GitHub** — it helps others discover the project!
-
-[![Share on X](https://img.shields.io/badge/share-000000?logo=x&logoColor=white)](https://x.com/intent/tweet?text=Check%20out%20Porch%20%E2%80%94%20connect%20and%20chain%20MCPs%20locally%20https://porch.sh%20%23MCP%20%23AI)
-[![Share on LinkedIn](https://img.shields.io/badge/share-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/sharing/share-offsite/?url=https://porch.sh)
-
-Your MCPs don't talk to each other. Porch discovers and installs MCPs from npm and PyPI, connects them by URL or stdio, chains their tools in workflows, tunnels any MCP to the internet (quick or named, per-MCP tokens), and lets your favorite LLM add MCPs, build workflows, manage the tunnel, and run it all from chat. Web UI, Easy Install for Cursor, Claude, Windsurf, and Continue, CLI, one-command bootstrap with auto-start.
-
-## Table of Contents
-
-- [Setup](#setup)
-- [Config](#config)
-- [Workflows](#workflows)
-- [Easy Install (Mac, Linux, Windows)](#easy-install-mac-linux-windows)
-- [Uninstall](#uninstall)
-- [Connect (MCP Client Setup)](#connect-mcp-client-setup)
-- [Web UI](#web-ui)
-- [CLI](#cli)
-- [Use as an MCP](#use-as-an-mcp)
-- [Public URL (Tunnel)](#public-url-tunnel)
-- [Prerequisites](#prerequisites)
-
-## Setup
-
-```bash
-cd porch
-npm install
-npm run build
-```
-
-## Config
-
-Copy the example and edit for your setup:
-```bash
-cp porch.config.example.json porch.config.json
-```
-Your config is gitignored and never committed. Two MCP types:
-
-### URL (HTTP/SSE)
-For MCPs that expose an HTTP endpoint (e.g. Pieces):
-
-```json
-"pieces": {
-  "type": "url",
-  "url": "http://localhost:39300/model_context_protocol/2025-03-26/mcp"
-}
-```
-
-### Stdio (spawn process)
-For MCPs that run as a process (e.g. Spotify MCP):
-
-```json
-"spotify": {
-  "type": "stdio",
-  "command": "node",
-  "args": ["./spotify-mcp-server/build/index.js"],
-  "cwd": "./spotify-mcp-server"
-}
-```
-
-Use absolute paths if running from elsewhere. For the filesystem MCP, replace `/path/to/your/projects` with a directory you want to allow (e.g. your home or a project folder).
-
-### Bearer tokens (URL MCPs)
-
-For URL MCPs that require a Bearer token, add `authorizationToken`:
-
-```json
-"pieces": {
-  "type": "url",
-  "url": "http://localhost:39300/.../mcp",
-  "authorizationToken": "env:MCP_PIECES_TOKEN"
-}
-```
-
-Supported formats:
-- `env:VAR_NAME` — read from `process.env.VAR_NAME` (recommended for CI)
-- `secret:key` — read from `porch.secrets.json` (stored locally, gitignored)
-- Plain string — avoid in committed config
-
-Store a token via API: `PUT /api/secrets/:key` with `{ "value": "your-token" }`.
-
-### Encrypted secrets (recommended)
-
-When a master key is available, secrets are stored **encrypted** (AES-256-GCM) in `porch.secrets.json`. The key is stored in the **OS keychain** (macOS Keychain, Windows Credential Manager, Linux Secret Service)—no plain-text key file.
-
-**Install script** prompts for a password and stores the derived key in the OS keychain. No files with secrets.
-
-**Manual setup:** run `npm run setup-encryption` and enter a password (min 8 chars). Or use the Settings UI: enter a password and click "Set up encryption". Existing secrets are re-encrypted immediately.
-
-**Override:** set `PORCH_MASTER_KEY` (base64 32-byte key or passphrase) in your environment to use a different key than keychain.
-
-**Without master key:** falls back to legacy plain JSON. Restrict permissions: `chmod 600 porch.secrets.json`.
-
-### Tool routing: gateway vs full
-
-**Default: `proxyMode: "gateway"`** — One route per MCP instead of per tool. Keeps tool count low (3 MCPs → 3 gateway tools + native orchestrator tools).
-
-- Call `spotify__call(tool="getNowPlaying", args={})` or `P__call(tool="create_pieces_memory", args={})`
-- Use `list_tools(mcp="spotify")` to discover available tools
-- Workflows unchanged — they use `mcp` + `tool` in steps
-
-**Legacy: `proxyMode: "full"`** — Every MCP tool as its own proxy (`spotify__getNowPlaying`, `Pieces__create_pieces_memory`, etc.). Full ergonomics but can exceed 80-tool limits with many MCPs. Use `proxyPrefix`, `toolsInclude`, or `toolsExclude` per MCP to trim.
-
-## Workflows
-
-Workflows chain steps. Use placeholders to inject previous step output into the next step's args:
-
-| Placeholder | Use case |
-|-------------|----------|
-| `{{step0}}` | Full text output of step 0 |
-| `{{step1.id}}` | JSON path – when the step returns valid JSON, extract `id` |
-| `{{step1:regex:Playlist ID: (\w+)}}` | Regex – single capture group |
-| `{{step0:regexAll:ID: (\w+)}}` | Regex all – all captures as **array** |
-| `{{now}}` | Current time in ISO format |
-| `{{isoDate}}` | Today's date (YYYY-MM-DD) |
-| `{{date}}` | Local date string |
-| `{{timestamp}}` | Unix milliseconds |
-| `{{uuid}}` | Random UUID |
-| `{{year}}`, `{{month}}`, `{{day}}`, `{{weekday}}` | Date parts |
-| `{{js: new Date().toLocaleDateString('en-US', {month:'long'}) }}` | Arbitrary JavaScript expression |
-
-Example: Spotify → Pieces
-
-```json
-{
-  "name": "Spotify to Pieces",
-  "steps": [
-    { "mcp": "spotify", "tool": "getRecentlyPlayed", "args": { "limit": 15 } },
-    {
-      "mcp": "pieces",
-      "tool": "create_pieces_memory",
-      "args": {
-        "summary_description": "Spotify listening history",
-        "summary": "# Recently Played\n\n{{step0}}"
-      }
-    }
-  ]
-}
-```
-
-## Easy Install (Mac, Linux, Windows)
-
-One-command installer that runs the server in the background and adds **porch.local** so you can open the UI with a friendly URL. By default, the server is set to **auto-start when you log in**.
-
-### One-line install (paste into terminal)
-
-**Mac & Linux:**
-```bash
-bash <(curl -sSL https://raw.githubusercontent.com/porch-sh/porch/main/scripts/bootstrap.sh)
-```
-
-**Skip auto-start:**
-```bash
-bash <(curl -sSL https://raw.githubusercontent.com/porch-sh/porch/main/scripts/bootstrap.sh) --no-startup
-```
-
-**Windows PowerShell:**
-```powershell
-irm https://raw.githubusercontent.com/porch-sh/porch/main/scripts/bootstrap.ps1 | iex
-```
-
-**Windows, skip auto-start:** `$env:NO_STARTUP=1; irm https://raw.githubusercontent.com/porch-sh/porch/main/scripts/bootstrap.ps1 | iex`
-
-The bootstrap clones the repo to `~/porch`, runs `npm install` and `npm run build`, then starts the server. It will prompt for optional tools (uv, cloudflared) and encrypted secrets setup.
-
-**Non-interactive** (CI, automation, skip all prompts): `curl -sSL https://raw.githubusercontent.com/porch-sh/porch/main/scripts/bootstrap.sh | bash`
-
----
-
-**Mac & Linux (manual, after clone):**
-```bash
-cd porch
-chmod +x scripts/*.sh
-./scripts/install.sh
-```
-Then open **http://porch.local:3847** (or http://localhost:3847)
-
-**Windows (PowerShell as Administrator for hosts file):**
-```powershell
-cd porch
-.\scripts\install.ps1
-```
-Then open **http://porch.local:3847**
-
-**Skip auto-start** (install without auto-start on login):
-
-```bash
-./scripts/install.sh --no-startup
-```
-
-```powershell
-.\scripts\install.ps1 -NoStartup
-```
-
-**Cloudflared** (for Public URLs / tunnels): The installer prompts to install cloudflared. To skip the prompt:
-
-```bash
-./scripts/install.sh --cloudflared    # Install cloudflared
-./scripts/install.sh --no-cloudflared # Skip (default when non-interactive)
-```
-
-```powershell
-.\scripts\install.ps1 -Cloudflared    # Install cloudflared
-.\scripts\install.ps1 -NoCloudflared  # Skip
-```
-
-**uv** (for Python MCPs from Discover, e.g. fast-mcp-telegram): The installer prompts to install uv. To skip the prompt:
-
-```bash
-./scripts/install.sh --uv     # Install uv
-./scripts/install.sh --no-uv  # Skip (default when non-interactive)
-```
-
-```powershell
-.\scripts\install.ps1 -Uv     # Install uv
-.\scripts\install.ps1 -NoUv   # Skip
-```
-
-**Control scripts:**
-- `./scripts/start.sh` / `.\scripts\start.ps1` — start server in background
-- `./scripts/stop.sh` / `.\scripts\stop.ps1` — stop server
-- `./scripts/update.sh` / `.\scripts\update.ps1` — update (git pull, npm install, build, restart)
-- `./scripts/enable-startup.sh` / `.\scripts\enable-startup.ps1` — enable auto-start on login
-- `./scripts/disable-startup.sh` / `.\scripts\disable-startup.ps1` — disable auto-start on login
-- Logs: `tail -f .porch.log` (Mac/Linux) or `Get-Content .porch.log -Wait -Tail 20` (Windows). On Windows, stderr goes to `.porch.err`.
-
-The installer adds `127.0.0.1 porch.local` to your hosts file (requires sudo/admin on first run).
-
-### Disabling auto-start
-
-If you installed with auto-start enabled and want to turn it off:
-
-**Mac:**
-```bash
-./scripts/disable-startup.sh
-```
-This stops the server and removes the launch agent. It will not start on next login.
-
-**Linux:**
-```bash
-./scripts/disable-startup.sh
-```
-This stops the server and removes the systemd user service.
-
-**Windows:**
-```powershell
-.\scripts\disable-startup.ps1
-```
-This stops the server and removes the scheduled task.
-
-To re-enable auto-start later, run `./scripts/enable-startup.sh` or `.\scripts\enable-startup.ps1`.
-
-### Uninstall
-
-**Mac & Linux:**
-```bash
-cd ~/porch
-./scripts/disable-startup.sh
-```
-This stops the server and removes the launchd/systemd auto-start entry.
-
-**Windows:**
-```powershell
-cd ~\porch
-.\scripts\disable-startup.ps1
-```
-This stops the server and removes the scheduled task.
-
-**Optional cleanup:**
-- Remove `127.0.0.1 porch.local` from your hosts file (`/etc/hosts` on Mac/Linux, `C:\Windows\System32\drivers\etc\hosts` on Windows).
-- Delete the project folder: `rm -rf ~/porch` (Mac/Linux) or remove `~\porch` (Windows).
-
-If you used a custom install location, run the scripts from that directory instead of `~/porch`.
-
-## Web UI
-
-```bash
-npm run ui
-# → http://localhost:3847
-```
-
-The UI lets you:
-
-
-- **Add MCPs** by URL (e.g. `http://localhost:39300/.../mcp`) or by file/stdio (command, args, cwd)
-- **Connect** — Add Porch to Cursor, Claude Desktop, Windsurf, or Continue via Easy Install 
-- **Build workflows** by chaining actions from your MCPs; use `{{step0}}`, `{{step1}}`, `{{now}}`, `{{isoDate}}`, etc. in args
-- **Schedule workflows** to run automatically (cron) via the Schedule tab
-- **Run workflows** and view output
-
-Config is saved to `porch.config.json` in the project directory.
-
-## CLI
-
-```bash
-npm run list
-npm run workflow -- "Spotify to Pieces"
-```
-
-## Run every 30 mins (optional)
-
-To sync Spotify → Pieces automatically every 30 minutes:
-
-**Cron:**
-```cron
-*/30 * * * * cd /path/to/porch && npm run workflow -- "Spotify to Pieces"
-```
-
-## Connect (MCP Client Setup)
-
-The **Connect** tab in the Web UI makes it easy to add Porch to your AI client.
-
-1. Open the UI (`npm run ui`) → **Connect** tab
-2. Select your **platform** (macOS, Windows, Linux — auto-detected)
-3. Select your **client** (Cursor, Claude Desktop, Windsurf, Continue)
-4. Click **Easy Install** to write the config into the correct file while keeping your existing MCPs
-
-Or use **Copy config** to paste the JSON manually. Restart your client after saving.
-
-| Client | Config path (macOS) |
-|--------|---------------------|
-| Cursor | `~/.cursor/mcp.json` |
-| Claude Desktop | `~/Library/Application Support/Claude/claude_desktop_config.json` |
-| Windsurf | `~/.codeium/windsurf/mcp_config.json` |
-| Continue | `~/.continue/config.json` |
-
-**Claude Desktop note:** Claude only supports stdio MCPs, not HTTP. Easy Install uses the built-in stdio bridge (`mcp-bridge.js`) so Claude can talk to the orchestrator’s HTTP endpoint. Ensure MCP Orchestrator is running before opening Claude.
-
-**Run from the mcp-orchestrator directory** when using Easy Install so the bridge path resolves correctly (e.g. `cd mcp-orchestrator && npm run ui`).
-
-## Use as an MCP
-
-Porch is a first-class MCP server. Add it to any MCP client (Cursor, Claude Desktop, Windsurf, Continue, MCP Inspector, or custom apps) and operate workflows, MCPs, the tunnel, and installs—all from chat, no web UI required.
-
-### Resources (read these for context)
-- `orchestrator://glossary` — Read first: reference for every tool, args, usage, examples (customize via `docs/glossary.md`)
-- `orchestrator://workflow-guide` — Instruction set for creating workflows: manual run, output inspection, placeholders (see `docs/creating-workflows.md`)
-- `orchestrator://config` — Full config (mcps, workflows)
-- `orchestrator://status` — MCP health + tunnel status
-- `orchestrator://logs` — Recent logs
-
-### Tools by category
-
-| Category | Tools |
-|----------|-------|
-| **Workflows** | `list_workflows`, `run_workflow`, `get_workflow`, `add_workflow`, `update_workflow`, `delete_workflow`, `schedule_workflow`, `unschedule_workflow` |
-| **MCPs** | `list_mcps`, `get_mcp_status`, `add_mcp`, `remove_mcp`, `enable_mcp`, `disable_mcp`, `call_tool`, `list_tools` |
-| **Tunnel** | `get_tunnel_status`, `start_tunnel`, `stop_tunnel`, `set_tunnel_domain`, `cloudflare_login`, `generate_tunnel_token`, `revoke_tunnel_token` |
-| **Registry** | `search_registry`, `install_from_registry`, `install_npm_mcp` |
-| **Observability** | `get_config`, `get_logs`, `clear_logs` |
-
-**Direct MCP access:** Each MCP's tools are exposed as `mcpName__toolName` (e.g. `spotify__getNowPlaying`, `pieces__create_pieces_memory`). Call them directly—no workflow required. Use `call_tool` when you need to specify mcp/tool explicitly.
-
-### Setup
-
-Add Porch as a **Streamable HTTP** MCP with URL `http://localhost:3847/mcp` (or `http://porch.local:3847/mcp` if using the hosts entry). **Easiest:** use the Connect tab → Easy Install.
-
-**Cursor, Windsurf, Continue:** These clients support HTTP MCPs. Add URL `http://localhost:3847/mcp` in your client’s MCP settings, or use Connect → Easy Install.
-
-**Claude Desktop:** Claude only supports stdio MCPs. Use Connect → Easy Install (it adds a stdio bridge config), or add manually to `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "porch": {
-      "command": "node",
-      "args": ["/path/to/porch/build/mcp-bridge.js"],
-      "env": {
-        "PORCH_URI": "http://localhost:3847/mcp"
-      }
-    }
-  }
-}
-```
-
-Replace `/path/to/porch` with your install path. Ensure the Porch server is running (`npm run ui` or via the install scripts) before connecting.
-
-## Public URL (Tunnel)
-
-Expose **any MCP** to the internet with token auth. Two options:
-
-### Quick tunnel (no config)
-
-Free, no sign-up. URL changes each start.
-
-1. **Install cloudflared**: `brew install cloudflared`
-2. Open the **Public URLs** tab → **Start tunnel**
-3. Creates `https://xxx.trycloudflare.com`
-4. Generate tokens per MCP; remote clients use URL + Bearer token
-
-### Named tunnel (stable URL)
-
-Requires a Cloudflare account. Same URL every time.
-
-1. **Login** — In the Public URLs tab, click **Login to Cloudflare**. A browser opens; sign in and approve.
-2. **Set subdomain base** — Enter your domain (e.g. `porch.sh`) in the "Subdomain base" field and Save. The domain must be in your Cloudflare account.
-3. **Start tunnel** — Creates a named tunnel, routes DNS (`spotify.porch.sh`, `pieces.porch.sh`, etc.), and runs. Each MCP gets its own subdomain.
-
-Alternatively, use token-based named tunnel: set `CLOUDFLARE_TUNNEL_TOKEN` and `CLOUDFLARE_TUNNEL_PUBLIC_URL` (or secrets).
-
-**URL MCPs** are tunneled via the orchestrator; **stdio MCPs** use an HTTP-to-stdio bridge. All traffic is proxied and validated with per-MCP tokens. Without the token, access is denied.
-
-**Example (any MCP client):**
-```
-URL: https://your-tunnel.trycloudflare.com/tunnel/pieces
-Authorization: Bearer <your-token>
-```
-
-**Security:**
-- MCP tokens in `porch.secrets.json`. Use **Revoke** to invalidate.
-- Tunnel token/URL: use env vars or secrets; never commit.
-
-## Prerequisites
-
-- **Node.js** (v18+)
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Porch</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="header-main">
+        <div>
+          <h1 class="logo">Porch</h1>
+          <p class="tagline">Connect MCPs · Build automations · Chain tools</p>
+        </div>
+        <div class="header-actions">
+          <button type="button" class="btn btn-ghost btn-settings" id="settings-btn" title="Settings">
+            <svg class="settings-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            <span class="settings-label">Settings</span>
+          </button>
+          <button type="button" class="btn btn-ghost btn-logs" id="logs-btn" title="View activity logs">
+            <span class="logs-icon">≡</span>
+            <span class="logs-label">Logs</span>
+            <span class="logs-badge hidden" id="logs-badge">0</span>
+          </button>
+        </div>
+      </div>
+      <nav class="tabs">
+        <button class="tab active" data-tab="mcps">MCPs</button>
+        <button class="tab" data-tab="workflows">Workflows</button>
+        <button class="tab" data-tab="schedule">Schedule</button>
+        <button class="tab" data-tab="run">Run</button>
+        <button class="tab" data-tab="tunnel">Public URLs</button>
+        <button class="tab" data-tab="connect">Connect</button>
+      </nav>
+    </header>
+
+    <main class="main">
+      <section id="panel-mcps" class="panel active">
+        <div class="panel-header">
+          <h2>MCP Servers</h2>
+          <div class="panel-header-actions">
+            <div class="mcp-view-toggle" role="group" aria-label="View mode">
+              <button type="button" class="mcp-view-btn active" data-view="card" title="Compact cards, 3 per row">Card</button>
+              <button type="button" class="mcp-view-btn" data-view="expanded" title="Full details with tools list">Expanded</button>
+            </div>
+            <button type="button" class="btn btn-ghost" id="check-mcp-status-btn" title="Check if MCPs are online">Check status</button>
+            <button type="button" class="btn btn-primary" id="add-mcp-btn">Add MCP</button>
+          </div>
+        </div>
+        <div class="mcp-sub-tabs">
+          <button type="button" class="mcp-sub-tab active" data-mcp-sub="my-mcps">My MCPs</button>
+          <button type="button" class="mcp-sub-tab" data-mcp-sub="discover">Discover</button>
+        </div>
+        <div id="mcp-checking-banner" class="mcp-checking-banner hidden">
+          <span class="mcp-checking-spinner"></span>
+          <span>Checking MCPs…</span>
+        </div>
+        <div id="mcp-sub-panel-my-mcps" class="mcp-sub-panel active">
+          <div id="mcps-list" class="mcps-list"></div>
+        </div>
+        <div id="mcp-sub-panel-discover" class="mcp-sub-panel">
+          <div class="discover-toolbar">
+            <input type="search" id="discover-search" placeholder="Search or type @org/package (e.g. @modelcontextprotocol/server-filesystem)…" class="discover-search" autocomplete="off" />
+            <button type="button" class="btn btn-ghost" id="discover-load-more">Load more</button>
+          </div>
+          <div id="discover-cards" class="discover-cards"></div>
+          <div id="discover-loading" class="discover-loading hidden">Loading…</div>
+          <div id="discover-empty" class="discover-empty hidden">No servers found.</div>
+        </div>
+      </section>
+
+      <section id="panel-workflows" class="panel">
+        <div class="panel-header">
+          <h2>Workflow Builder</h2>
+          <button type="button" class="btn btn-primary" id="add-workflow-btn">Add Workflow</button>
+        </div>
+        <div id="workflows-list" class="workflows-list"></div>
+      </section>
+
+      <section id="panel-schedule" class="panel">
+        <div class="panel-header">
+          <h2>Scheduled Workflows</h2>
+        </div>
+        <div id="schedule-list" class="schedule-list"></div>
+        <div class="form-row-hint" style="margin-top:1rem">Cron format: minute hour day-of-month month day-of-week. Use Time for recurring times (e.g. */30 * * * * = every 30 min). Use Date for specific days (e.g. 0 0 * * 1 = Mondays at midnight).</div>
+      </section>
+
+      <section id="panel-run" class="panel">
+        <div class="panel-header">
+          <h2>Run Workflows</h2>
+        </div>
+        <details class="run-input-details" id="run-input-details">
+          <summary>Input (optional) for {{input.key}} placeholders</summary>
+          <textarea id="run-input" class="run-input" placeholder='{"subject": "math"}' rows="3"></textarea>
+        </details>
+        <div id="run-workflows" class="run-list"></div>
+        <h3 class="output-label">Output</h3>
+        <div id="output" class="output-box">
+          <p class="placeholder">Run a workflow to see output.</p>
+        </div>
+      </section>
+
+      <section id="panel-tunnel" class="panel">
+        <div class="panel-header">
+          <h2>Public URLs</h2>
+          <div class="panel-header-actions">
+            <button type="button" class="btn btn-primary" id="tunnel-start-btn">Start tunnel</button>
+            <button type="button" class="btn btn-danger hidden" id="tunnel-stop-btn">Stop tunnel</button>
+          </div>
+        </div>
+        <p class="tunnel-hint">Expose MCPs via Cloudflare tunnel with token auth. <strong>Quick tunnel</strong> (no config): random URL each start. <strong>Named tunnel</strong> (stable URL): set <code>CLOUDFLARE_TUNNEL_TOKEN</code> + <code>CLOUDFLARE_TUNNEL_PUBLIC_URL</code> or add to Secrets. Or <strong>Login to Cloudflare</strong> first to use your linked domain (e.g. <code>spotify.example.com</code>).</p>
+        <p id="tunnel-named-hint" class="tunnel-named-hint hidden">Stable URL configured. Your tunnel will use the same hostname every time.</p>
+        <p id="tunnel-cloudflare-login-row" class="tunnel-cloudflare-login-row">
+          <span id="tunnel-cloudflare-status"></span>
+          <button type="button" class="btn btn-ghost" id="tunnel-cloudflare-login-btn">Login to Cloudflare</button>
+        </p>
+        <div id="tunnel-domain-row" class="tunnel-domain-row hidden">
+          <label for="tunnel-domain-input">Domain (from Cloudflare login)</label>
+          <div class="tunnel-domain-input-row">
+            <input type="text" id="tunnel-domain-input" placeholder="example.com" />
+            <button type="button" class="btn btn-ghost" id="tunnel-domain-save-btn">Save</button>
+          </div>
+          <p class="tunnel-domain-hint">The domain you linked during Cloudflare login. Each MCP gets a subdomain: <code>spotify.example.com</code>, <code>pieces.example.com</code>, etc.</p>
+        </div>
+        <div id="tunnel-secure-status" class="tunnel-secure-status hidden">
+          <div class="tunnel-base-url">
+            <label>Base URL</label>
+            <div class="tunnel-value">
+              <code id="tunnel-secure-url"></code>
+              <button type="button" class="btn btn-ghost btn-copy-secure-url" title="Copy base URL">Copy</button>
+            </div>
+            <p id="tunnel-inactive-note" class="tunnel-inactive-note hidden">Tunnel stopped. URL saved—click <strong>Start tunnel</strong> to reconnect.</p>
+          </div>
+        </div>
+        <h3 class="tunnel-mcps-heading">MCPs</h3>
+        <p class="tunnel-subhint">Generate a token for each MCP to share with remote clients. Each token is scoped to that MCP only.</p>
+        <div id="tunnel-mcps-list" class="tunnel-mcps-list"></div>
+      </section>
+
+      <section id="panel-connect" class="panel">
+        <div class="panel-header">
+          <h2>Connect Porch</h2>
+        </div>
+        <p class="connect-intro">Add Porch to your AI client (Cursor, Claude Desktop, Windsurf, or Continue). Select your platform and client, then copy the config or use <strong>Easy Install</strong> to write it into your config file automatically.</p>
+        <div class="connect-form">
+          <div class="form-row">
+            <label for="connect-platform">Platform</label>
+            <select id="connect-platform" class="connect-select">
+              <option value="mac">macOS</option>
+              <option value="windows">Windows</option>
+              <option value="linux">Linux</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label for="connect-client">Client</label>
+            <select id="connect-client" class="connect-select">
+              <option value="cursor">Cursor</option>
+              <option value="claude-desktop">Claude Desktop</option>
+              <option value="windsurf">Windsurf</option>
+              <option value="continue">Continue</option>
+            </select>
+          </div>
+          <div class="connect-actions">
+            <button type="button" class="btn btn-primary" id="connect-install-btn">Easy Install</button>
+            <button type="button" class="btn btn-ghost" id="connect-copy-btn">Copy config</button>
+          </div>
+        </div>
+        <div id="connect-status" class="connect-status hidden"></div>
+        <h3 class="connect-config-label">Config preview</h3>
+        <pre id="connect-config-preview" class="connect-config-preview"></pre>
+        <details class="connect-guide" open>
+          <summary>Setup guides by platform & client</summary>
+          <div id="connect-guide-content" class="connect-guide-content"></div>
+        </details>
+      </section>
+
+      <section id="panel-settings" class="panel">
+        <div class="panel-header">
+          <h2>Settings</h2>
+        </div>
+        <div class="settings-sections">
+          <section class="settings-section">
+            <h3 class="settings-section-title">
+              Server Info
+              <span class="tooltip-wrap" title="Read-only information about where Porch stores data and which port it uses.">ⓘ</span>
+            </h3>
+            <div id="settings-server-info" class="settings-server-info"></div>
+          </section>
+          <section class="settings-section">
+            <h3 class="settings-section-title">
+              Secrets
+              <span class="tooltip-wrap" title="Store tokens and API keys here. Values are saved in porch.secrets.json (gitignored). Use in MCP config as secret:key (e.g. secret:OPENAI_API_KEY).">ⓘ</span>
+            </h3>
+            <p class="settings-desc">Secrets are used for Bearer tokens, Cloudflare tunnel config, and MCP authorization. When encryption is enabled, the key is stored in the OS keychain (no plain-text file).</p>
+            <div id="settings-encryption-status" class="settings-encryption-status"></div>
+            <div id="settings-setup-encryption" class="settings-setup-encryption hidden">
+              <input type="password" id="settings-encryption-password" placeholder="Password (min 8 chars)" class="settings-input" minlength="8" />
+              <button type="button" class="btn btn-primary" id="settings-encryption-setup">Set up encryption</button>
+            </div>
+            <div id="settings-secrets-list" class="settings-secrets-list"></div>
+            <div class="settings-add-secret">
+              <input type="text" id="settings-secret-key" placeholder="Key (e.g. OPENAI_API_KEY)" class="settings-secret-key" title="Secret key name. Use env:VAR for env vars, or secret:key to reference in MCP config." />
+              <input type="password" id="settings-secret-value" placeholder="Value" class="settings-secret-value" title="The secret value. Stored securely in porch.secrets.json." />
+              <button type="button" class="btn btn-primary" id="settings-secret-add">Add</button>
+            </div>
+          </section>
+          <section class="settings-section">
+            <h3 class="settings-section-title">
+              Cloudflare Tunnel
+              <span class="tooltip-wrap" title="For a stable Public URL, add your Cloudflare tunnel token and public URL here. Or use env vars: CLOUDFLARE_TUNNEL_TOKEN, CLOUDFLARE_TUNNEL_PUBLIC_URL.">ⓘ</span>
+            </h3>
+            <p class="settings-desc">Configure a named tunnel for a stable Public URL. Get these from Cloudflare Zero Trust or dashboard after creating a tunnel.</p>
+            <div class="settings-form-grid">
+              <div class="settings-field">
+                <label for="settings-tunnel-token">Tunnel token</label>
+                <input type="password" id="settings-tunnel-token" placeholder="Paste from Cloudflare dashboard" class="settings-input" title="Cloudflare tunnel token. Stored as secret cloudflare_tunnel_token." />
+                <span class="settings-field-hint">From Cloudflare: Create tunnel → Use existing token</span>
+              </div>
+              <div class="settings-field">
+                <label for="settings-tunnel-url">Public URL</label>
+                <input type="text" id="settings-tunnel-url" placeholder="https://porch.sh" class="settings-input" title="The public hostname for your tunnel (e.g. https://porch.sh)." />
+                <span class="settings-field-hint">Hostname you configured in Cloudflare</span>
+              </div>
+              <div class="settings-field">
+                <label for="settings-tunnel-domain">Base domain (optional)</label>
+                <input type="text" id="settings-tunnel-domain" placeholder="porch.sh" class="settings-input" title="Domain for subdomain-per-MCP (e.g. spotify.porch.sh). Used when logged in to Cloudflare." />
+                <span class="settings-field-hint">For subdomain routing: each MCP gets its own subdomain</span>
+              </div>
+            </div>
+            <div class="settings-actions">
+              <button type="button" class="btn btn-primary" id="settings-tunnel-save">Save tunnel config</button>
+              <span id="settings-tunnel-status" class="settings-status"></span>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+    <footer class="page-footer">
+      <a href="https://github.com/dev-nolant/porch" target="_blank" rel="noopener noreferrer" class="github-btn" title="View on GitHub">
+        <svg class="github-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+        </svg>
+        <span>View on GitHub</span>
+      </a>
+    </footer>
+  </div>
+
+  <div id="logs-overlay" class="logs-overlay hidden"></div>
+  <aside id="logs-panel" class="logs-panel">
+    <div class="logs-panel-header">
+      <h3 class="logs-panel-title">Activity Logs</h3>
+      <div class="logs-panel-actions">
+        <select id="logs-filter" class="logs-filter" title="Filter by type">
+          <option value="all">All</option>
+          <option value="run">Run</option>
+          <option value="schedule">Schedule</option>
+          <option value="spin">Spin</option>
+          <option value="install">Install</option>
+          <option value="config">Config</option>
+          <option value="tunnel">Tunnel</option>
+        </select>
+        <button type="button" class="btn btn-ghost btn-logs-download" title="Download logs as JSON (send to developer for support)">↓ Download</button>
+        <button type="button" class="btn btn-ghost btn-logs-clear" title="Clear logs">Clear</button>
+        <button type="button" class="btn btn-ghost btn-logs-close" id="logs-close-btn" title="Close">×</button>
+      </div>
+    </div>
+    <div id="logs-list" class="logs-list"></div>
+    <div id="logs-empty" class="logs-empty">No logs yet. Run workflows, spin MCPs, or install packages.</div>
+  </aside>
+
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div id="modal" class="modal"></div>
+  </div>
+
+  <div id="mcp-wiki-modal-overlay" class="mcp-wiki-modal-overlay hidden">
+    <div id="mcp-wiki-modal" class="mcp-wiki-modal">
+      <header class="mcp-wiki-modal-header">
+        <div class="mcp-wiki-modal-title-row">
+          <h2 id="mcp-wiki-modal-title" class="mcp-wiki-modal-title">MCP</h2>
+          <span id="mcp-wiki-modal-status" class="mcp-wiki-modal-status"></span>
+        </div>
+        <div class="mcp-wiki-modal-actions">
+          <button type="button" class="btn btn-ghost btn-wiki-edit" title="Edit MCP config">Edit</button>
+          <button type="button" class="btn btn-ghost btn-wiki-spin" title="Spin up/down">—</button>
+          <button type="button" class="btn btn-ghost mcp-wiki-close" title="Close">×</button>
+        </div>
+      </header>
+      <nav class="mcp-wiki-tabs" role="tablist">
+        <button type="button" class="mcp-wiki-tab active" data-tab="overview" role="tab">Overview</button>
+        <button type="button" class="mcp-wiki-tab" data-tab="tools" role="tab">Tools</button>
+        <button type="button" class="mcp-wiki-tab" data-tab="implementations" role="tab">Implementations</button>
+      </nav>
+      <div class="mcp-wiki-panes">
+        <div id="wiki-pane-overview" class="mcp-wiki-pane active" data-pane="overview" role="tabpanel"></div>
+        <div id="wiki-pane-tools" class="mcp-wiki-pane" data-pane="tools" role="tabpanel"></div>
+        <div id="wiki-pane-implementations" class="mcp-wiki-pane" data-pane="implementations" role="tabpanel"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
