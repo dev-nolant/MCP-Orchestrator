@@ -1,0 +1,3 @@
+# Railway/Nixpacks — Next.js 16 requires Node >= 20.9.0
+[variables]
+NIXPACKS_NODE_VERSION = "22"

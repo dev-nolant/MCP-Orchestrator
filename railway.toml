@@ -1,0 +1,16 @@
+# Web service (Next.js) — deploy from repo root.
+# In Railway: New Service → GitHub repo → leave Root Directory empty.
+
+[build]
+builder = "NIXPACKS"
+buildCommand = "npm run build"
+
+[deploy]
+startCommand = "npm run start"
+# Safe when schema already matches your Supabase DB (existing listings stay intact).
+# Remove or comment out if you manage schema manually.
+releaseCommand = "npm run db:deploy"
+healthcheckPath = "/"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
